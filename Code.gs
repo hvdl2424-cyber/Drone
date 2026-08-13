@@ -74,7 +74,15 @@ function ensureSheets_(ss){
   if(def && ss.getSheets().length > 3) ss.deleteSheet(def);
   return { members: members, groups: groups, tasks: tasks };
 }
-function blankGrid_(v){ var g=[]; for(var i=0;i<91;i++) g.push(v); return g; }
+function blankGrid_(v){
+  var g = [];
+  for (var d=0; d<7; d++){
+    var row = [];
+    for (var p=0; p<13; p++) row.push(v);
+    g.push(row);
+  }
+  return g;
+}
 function safeParse_(s, def){ try{ return s ? JSON.parse(s) : def; }catch(e){ return def; } }
 function json_(obj){
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
@@ -84,7 +92,7 @@ function json_(obj){
 function readMembers_(sh){
   var rows = sh.getDataRange().getValues(); rows.shift();
   return rows.map(function(r){
-    return { id:Number(r[0]), name:r[1], grid:safeParse_(r[2],[]), reason:safeParse_(r[3],[]),
+    return { id:Number(r[0]), name:r[1], grid:safeParse_(r[2],blankGrid_(true)), reason:safeParse_(r[3],blankGrid_('')),
       imported:!!r[4], method:r[5]||'', subj: r[6] ? safeParse_(r[6],null) : null };
   });
 }
