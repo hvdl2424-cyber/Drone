@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>無人機小組 · 時間協調系統</title>
+<meta name="ext-resource-dependency" content="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" data-resource-id="pdfjs" />
+<meta name="ext-resource-dependency" content="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js" data-resource-id="pdfjsWorker" />
+<script src="apps-script-config.js"></script>
+<style>
+:root{
+  --bg:#f3f2f2; --text:#201e1d; --divider:#201e1d;
+  --accent:#ec3013; --accent-100:#fde6e2; --accent-200:#f8c5bb; --accent-700:#a81f0c; --accent-900:#5c1206;
+  --n100:#ecebea; --n200:#dedcda; --n300:#c7c4c1; --n500:#8b8683; --n600:#6d6866; --n700:#4e4a48; --n800:#332f2e;
+  --fh:'Archivo','Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif;
+  --fb:'Archivo','Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--fb);font-size:14px}
+button{font-family:var(--fb)}
+a{color:var(--accent-700)}a:hover{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+::selection{background:var(--accent-200)}
+.input{font:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--n300);border-radius:0;background:#fff;color:var(--text);width:100%}
+.input:focus{border-color:var(--accent);outline:none}
+.field label{display:block;font-size:11px;letter-spacing:.08em;color:var(--n600);margin-bottom:4px;font-weight:600}
+.btn{border:2px solid var(--divider);background:#fff;color:var(--text);font-weight:600;font-size:13px;padding:8px 14px;cursor:pointer;text-align:left;border-radius:0}
+.btn:hover{background:var(--accent-100)}
+.btn:active{background:var(--accent-200)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-primary:hover{background:var(--accent-700);border-color:var(--accent-700)}
+.btn-ghost{border-color:transparent;background:transparent}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.tag{display:inline-block;font-size:11px;font-weight:700;padding:3px 8px;white-space:nowrap;border:1px solid var(--n300)}
+.tag-accent{background:var(--accent);border-color:var(--accent);color:#fff}
+.tag-outline{background:transparent;color:var(--n700)}
+table.data{width:100%;border-collapse:collapse;background:#fff}
+table.data th{text-align:left;font-size:11px;letter-spacing:.08em;color:var(--n600);padding:9px 10px;border-bottom:2px solid var(--divider);font-weight:700}
+table.data td{padding:8px 10px;border-bottom:1px solid var(--n200);font-size:13px;vertical-align:middle}
+.tabbar{display:flex;border-bottom:2px solid var(--divider);padding:0 32px;flex-wrap:wrap}
+.tabbar button{border:0;background:transparent;font:600 13px var(--fh);padding:12px 18px;cursor:pointer;color:var(--text)}
+.tabbar button:hover{background:var(--accent-100)}
+.tabbar button[aria-selected=true]{background:var(--text);color:#fff}
+.h1{font-family:var(--fh);font-weight:800;font-size:28px;margin:0 0 6px}
+.sub{font-size:13px;color:var(--n600);margin-bottom:20px;max-width:760px}
+.panel{border:2px solid var(--divider);background:#fff}
+.cols3{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;background:var(--divider);border:2px solid var(--divider)}
+.cols3>div{background:#fff}
+.backdrop{position:fixed;inset:0;background:rgba(32,30,29,.5);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
+.dialog{background:#fff;border:2px solid var(--divider);box-shadow:0 18px 40px rgba(32,30,29,.25);padding:24px;max-height:90vh;overflow:auto}
+.grid-cell{padding:6px 10px;text-align:center;border-bottom:1px solid var(--n200);font-variant-numeric:tabular-nums;font-weight:600;font-size:12px}
+input[type=range]{accent-color:var(--accent)}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<template id="__bundler_thumbnail" data-bg-color="#f3f2f2">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#f3f2f2"/>
+    <rect x="260" y="200" width="680" height="400" fill="#ffffff" stroke="#201e1d" stroke-width="14"/>
+    <rect x="260" y="200" width="680" height="78" fill="#201e1d"/>
+    <g fill="#dedcda">
+      <rect x="300" y="320" width="130" height="60"/>
+      <rect x="590" y="320" width="130" height="60"/>
+      <rect x="445" y="420" width="130" height="60"/>
+      <rect x="735" y="420" width="130" height="60"/>
+    </g>
+    <g fill="#ec3013">
+      <rect x="445" y="320" width="130" height="60"/>
+      <rect x="735" y="320" width="130" height="60"/>
+      <rect x="300" y="420" width="130" height="60"/>
+      <rect x="590" y="420" width="130" height="60"/>
+    </g>
+    <rect x="300" y="520" width="565" height="22" fill="#201e1d"/>
+  </svg>
+</template>
+<div id="app"></div>
+
+<script>
+/* ─────────── 常數 ─────────── */
+var DAYS = ['週一','週二','週三','週四','週五','週六','週日'];
+var TIMES = ['08:10-09:00','09:10-10:00','10:10-11:00','11:10-12:00','13:10-14:00','14:10-15:00','15:10-16:00','16:10-17:00','17:10-18:00','18:30-19:20','19:25-20:15','20:25-21:15','21:20-22:10'];
+var GROUPS = [{key:'fuselage',name:'機身組'},{key:'wing',name:'主翼組'},{key:'tail',name:'尾翼組'}];
+var MONTHS = [
+  {year:2026,month:9,days:30,startDow:1},
+  {year:2026,month:10,days:31,startDow:3},
+  {year:2026,month:11,days:30,startDow:6},
+  {year:2026,month:12,days:31,startDow:1}
+];
+var HOLIDAYS = {'9/25':'中秋節','9/28':'教師節','10/9':'國慶日彈性放假','10/10':'國慶日','10/25':'台灣光復節'};
+var YEAR_HOLIDAYS = [
+  {date:'1/1',name:'開國紀念日'},{date:'2/16–2/20',name:'春節連假'},
+  {date:'2/28',name:'和平紀念日'},{date:'4/3–4/6',name:'兒童節・清明連假'},
+  {date:'5/1',name:'勞動節'},{date:'6/19',name:'端午節'},
+  {date:'9/25',name:'中秋節'},{date:'9/28',name:'教師節'},
+  {date:'10/10',name:'國慶日'},{date:'10/25',name:'台灣光復節'}
+];
+var METHOD_LABEL = {shot:'課表截圖（人工確認）',xlsx:'Excel / CSV 匯出檔',ics:'行事曆 .ics',manual:'手動填寫'};
+var TABS = [['import','① 匯入課表'],['free','② 空堂總表'],['overlap','③ 重疊分析'],['group','④ 分組模擬'],['tasks','⑤ 任務與進度'],['cal','⑥ 週行程表'],['month','⑦ 月行事曆'],['gantt','⑧ 甘特圖']];
+var IDENTITY_KEY = 'drone-schedule-identity-v1';
+
+/* ─────────── 狀態 ─────────── */
+/* 共用資料（members / groups / locked / tasks）存放在 Firestore，即時同步給所有人；
+   其餘（tab、目前檢視的月份、篩選條件…）只是本機畫面狀態，不需要同步。 */
+function blankState(){
+  var members = [];
+  for(var i=0;i<9;i++){
+    members.push({id:i,name:'組員 '+(i+1),grid:mkGrid(true),reason:mkGrid(''),imported:false,method:''});
+  }
+  return {tab:'import',members:members,groups:{fuselage:[],wing:[],tail:[]},locked:false,tasks:[],
+    taskGroup:'fuselage',importing:null,previewGrid:null,previewReason:null,openTask:null,
+    draft:null,calFilter:'weekday',conflict:'',monthIdx:0,
+    ready:false,online:false,myId:null,gateError:''};
+}
+function mkGrid(v){var g=[];for(var d=0;d<7;d++){var r=[];for(var p=0;p<13;p++)r.push(v);g.push(r);}return g;}
+
+var S = blankState();
+try{
+  var idRaw = localStorage.getItem(IDENTITY_KEY);
+  if(idRaw){ var idObj = JSON.parse(idRaw); if(typeof idObj.myId==='number') S.myId = idObj.myId; }
+}catch(e){}
+function set(patch){ for(var k in patch) S[k]=patch[k]; render(); }
+
+/* ─────────── 計算 ─────────── */
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function active(){return S.members.filter(function(m){return m.imported;});}
+function freeCount(m){var n=0;for(var d=0;d<7;d++)for(var p=0;p<13;p++)if(m.grid[d][p])n++;return n;}
+function freeSplit(m){var a=0,b=0;for(var d=0;d<7;d++)for(var p=0;p<13;p++)if(m.grid[d][p]){if(d<5)a++;else b++;}return {wd:a,we:b};}
+function pairOverlap(a,b){var n=0;for(var d=0;d<7;d++){if(skipDay(d))continue;for(var p=0;p<13;p++){if(skipPeriod(p))continue;if(a.grid[d][p]&&b.grid[d][p])n++;}}return n;}
+function skipDay(d){ return S.olFilter!==false && d>=5; }
+function skipPeriod(p){ return S.olFilter!==false && p<2; }
+function groupCommon(ids){
+  var ms=ids.map(function(i){return S.members[i];}),slots=[];
+  if(ms.length<2)return{n:0,slots:slots};
+  for(var d=0;d<7;d++)for(var p=0;p<13;p++){
+    var ok=true;for(var k=0;k<ms.length;k++)if(!ms[k].grid[d][p])ok=false;
+    if(ok)slots.push([d,p]);
+  }
+  return {n:slots.length,slots:slots};
+}
+function slotSummary(slots){
+  if(!slots.length)return '尚無共同空堂';
+  var wd=slots.filter(function(s){return s[0]<5;}),we=slots.filter(function(s){return s[0]>=5;});
+  var fmt=function(a){
+    var by={};a.forEach(function(s){(by[s[0]]=by[s[0]]||[]).push(s[1]+1);});
+    return Object.keys(by).slice(0,3).map(function(d){var x=by[d];return DAYS[d]+' 第'+x[0]+'–'+x[x.length-1]+'節';}).join('　');
+  };
+  var out='平日（優先）：'+(wd.length?fmt(wd)+'　共 '+wd.length+' 節':'無');
+  out+='\n假日（備援）：'+(we.length?fmt(we)+'　共 '+we.length+' 節':'無');
+  return out;
+}
+function gname(k){for(var i=0;i<GROUPS.length;i++)if(GROUPS[i].key===k)return GROUPS[i].name;return k;}
+function heat(r){return 'color-mix(in oklch, var(--accent) '+Math.round(r*78)+'%, #fff)';}
+function heatText(r){return r*78>50?'#fff':'var(--text)';}
+
+/* ─────────── 檔案解析 ─────────── */
+function periodOfTime(hhmm){
+  var toMin=function(t){return Number(t.slice(0,2))*60+Number(t.slice(3,5));};
+  var x=toMin(hhmm),best=-1,bestD=1e9;
+  TIMES.forEach(function(range,i){var d=Math.abs(toMin(range.slice(0,5))-x);if(d<bestD){bestD=d;best=i;}});
+  return bestD<=45?best:-1;
+}
+function dowOf(text){
+  var map={'一':0,'二':1,'三':2,'四':3,'五':4,'六':5,'日':6,'天':6,MO:0,TU:1,WE:2,TH:3,FR:4,SA:5,SU:6};
+  var cn=/[週周星期]\s*([一二三四五六日天])/.exec(text); if(cn)return map[cn[1]];
+  var en=/\b(MO|TU|WE|TH|FR|SA|SU)\b/i.exec(text); if(en)return map[en[1].toUpperCase()];
+  return -1;
+}
+function parseCSV(text){
+  var grid=mkGrid(true),subj=mkGrid(''),hits=0;
+  text.split(/\r?\n/).forEach(function(line){
+    if(!line.trim())return;
+    var cols=line.split(/[,\t;]/).map(function(c){return c.trim();});
+    var d=dowOf(line); if(d<0)return;
+    var name=cols.filter(function(c){return c&&!/^\d/.test(c)&&!/[週周星期]/.test(c);})[0]||'有課';
+    var ps=[],range=/(\d{1,2})\s*[-–~到至]\s*(\d{1,2})\s*節/.exec(line),
+        single=/第?\s*(\d{1,2})\s*節/.exec(line),
+        times=/(\d{2}:\d{2})\s*[-–~]\s*(\d{2}:\d{2})/.exec(line);
+    if(range){for(var p=Number(range[1]);p<=Number(range[2]);p++)ps.push(p-1);}
+    else if(single)ps.push(Number(single[1])-1);
+    else if(times){var a=periodOfTime(times[1]),b=periodOfTime(times[2]);if(a>=0)for(var q=a;q<=(b>=0?b:a);q++)ps.push(q);}
+    ps.filter(function(p){return p>=0&&p<13;}).forEach(function(p){grid[d][p]=false;subj[d][p]=name.slice(0,6);hits++;});
+  });
+  return {grid:grid,subj:subj,hits:hits,kind:'Excel / CSV'};
+}
+function parseICS(text){
+  var grid=mkGrid(true),subj=mkGrid(''),hits=0;
+  text.split(/BEGIN:VEVENT/).slice(1).forEach(function(block){
+    var sum=(/SUMMARY[^:]*:(.*)/.exec(block)||[,'有課'])[1].trim();
+    var ds=/DTSTART[^:]*:(\d{8})T(\d{2})(\d{2})/.exec(block);
+    var de=/DTEND[^:]*:(\d{8})T(\d{2})(\d{2})/.exec(block);
+    if(!ds)return;
+    var d=-1,byday=/BYDAY=([A-Z,]+)/.exec(block);
+    if(byday)d=dowOf(byday[1].split(',')[0]);
+    if(d<0){var y=Number(ds[1].slice(0,4)),mo=Number(ds[1].slice(4,6)),dd=Number(ds[1].slice(6,8));d=(new Date(y,mo-1,dd).getDay()+6)%7;}
+    var a=periodOfTime(ds[2]+':'+ds[3]),b=de?periodOfTime(de[2]+':'+de[3]):a;
+    if(a<0)return;
+    for(var p=a;p<=(b>=0?Math.max(a,b):a);p++){grid[d][p]=false;subj[d][p]=sum.slice(0,6);hits++;}
+  });
+  return {grid:grid,subj:subj,hits:hits,kind:'行事曆 .ics'};
+}
+
+/* ─────────── 後端同步（Google Apps Script + Google Sheets） ───────────
+   後端是一支部署成「網路應用程式」的 Apps Script，資料庫是它綁定的 Google 試算表：
+   Members 分頁（9 列固定列）、Groups 分頁（1 列）、Tasks 分頁（每項任務一列）。
+   前端用 fetch 讀寫：GET 取得完整狀態，POST 送出動作（見 Code.gs）。
+   Apps Script 網路應用程式沒有像 Firestore 一樣的即時推播，所以改用「背景輪詢」
+   （每隔幾秒重新 GET 一次）讓大家看到彼此的最新狀態，畫面切到背景分頁時會暫停輪詢省配額。 */
+var GAS_URL = null, pollTimer = null;
+function asInit(){
+  if(typeof APPS_SCRIPT_URL==='undefined' || !APPS_SCRIPT_URL || /YOUR_/.test(APPS_SCRIPT_URL)){
+    S.ready=true; S.online=false;
+    S.gateError='尚未設定 apps-script-config.js，請依 README.md 部署 Apps Script 並填入網址。';
+    render(); return;
+  }
+  GAS_URL = APPS_SCRIPT_URL;
+  asRefresh().then(function(){
+    S.ready=true; S.online=true; render(); startPolling();
+  }).catch(function(err){
+    S.ready=true; S.online=false; S.gateError='連線失敗：'+err.message; render();
+  });
+}
+function asErr(err){ console.error(err); S.online=false; S.gateError='連線發生問題：'+err.message; render(); }
+function asRefresh(){
+  return fetch(GAS_URL,{method:'GET'}).then(function(r){
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return r.json();
+  }).then(function(d){
+    if(d.members && d.members.length===9){
+      S.members = d.members.map(function(m){
+        return {id:m.id,name:m.name,grid:m.grid,reason:m.reason,imported:!!m.imported,
+          method:m.method||'',subj:m.subj||undefined};
+      });
+    }
+    if(d.groups){ S.groups={fuselage:d.groups.fuselage||[],wing:d.groups.wing||[],tail:d.groups.tail||[]}; S.locked=!!d.groups.locked; }
+    S.tasks = d.tasks || [];
+    S.online = true;
+    render();
+  });
+}
+function startPolling(){
+  if(pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(function(){
+    if(document.hidden) return; // 分頁在背景時暫停輪詢，節省 Apps Script 每日配額
+    asRefresh().catch(function(err){ console.error(err); S.online=false; render(); });
+  }, 8000);
+}
+function asPost(action,payload){
+  return fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify({action:action,payload:payload})}).then(function(r){
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      return r.json();
+    }).then(function(d){
+      if(!d.ok) throw new Error(d.error||'寫入失敗');
+      return d.result;
+    });
+}
+function genId(){
+  if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'id-'+Date.now()+'-'+Math.random().toString(36).slice(2,10);
+}
+function writeMember(id){
+  if(!GAS_URL) return;
+  var m=S.members[id];
+  asPost('writeMember',{id:id,name:m.name,grid:m.grid,reason:m.reason||mkGrid(''),
+    imported:!!m.imported,method:m.method||'',subj:m.subj||null}).catch(asErr);
+}
+function writeGroups(){
+  if(!GAS_URL) return;
+  asPost('writeGroups',{fuselage:S.groups.fuselage,wing:S.groups.wing,tail:S.groups.tail,locked:!!S.locked}).catch(asErr);
+}
+function createTask(data){
+  var id=genId();
+  asPost('createTask',{id:id,group:data.group,title:data.title,owner:data.owner,date:data.date,
+    slot:data.slot,day:data.day,p0:data.p0,p1:data.p1,span:data.span||1}).catch(asErr);
+  return id;
+}
+function updateTask(id,patch){ if(GAS_URL) asPost('updateTask',{id:id,patch:patch}).catch(asErr); }
+function deleteTask(id){ if(GAS_URL) asPost('deleteTask',{id:id}).catch(asErr); }
+function resetAllData(){ return GAS_URL ? asPost('resetAll',{}) : Promise.resolve(); }
+function uploadLogPhoto(file){
+  return compressImage(file,900,0.6).then(function(dataUrl){
+    return asPost('uploadPhoto',{dataUrl:dataUrl});
+  }).then(function(result){ return result.url; });
+}
+function compressImage(file,maxDim,quality){
+  return new Promise(function(resolve,reject){
+    var img=new Image(), reader=new FileReader();
+    reader.onload=function(){
+      img.onload=function(){
+        var w=img.width,h=img.height,scale=Math.min(1,maxDim/Math.max(w,h));
+        var cw=Math.max(1,Math.round(w*scale)),ch=Math.max(1,Math.round(h*scale));
+        var canvas=document.createElement('canvas'); canvas.width=cw; canvas.height=ch;
+        canvas.getContext('2d').drawImage(img,0,0,cw,ch);
+        resolve(canvas.toDataURL('image/jpeg',quality));
+      };
+      img.onerror=function(){ reject(new Error('無法讀取圖片')); };
+      img.src=reader.result;
+    };
+    reader.onerror=function(){ reject(new Error('無法讀取檔案')); };
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ─────────── 動作 ─────────── */
+var ACT = {
+  tab:function(e,el){ set({tab:el.dataset.k}); },
+  reset:function(){
+    if(!confirm('清除所有已輸入的課表與任務？這會影響所有組員看到的資料，且無法復原。'))return;
+    resetAllData().catch(asErr);
+  },
+  rename:function(e,el){
+    var id=+el.dataset.i, old=S.members[id].name, v=el.value;
+    S.members[id].name=v;
+    var changed=[];
+    S.tasks.forEach(function(t){ if(t.owner===old){ t.owner=v; changed.push(t.id); } });
+    render();
+    writeMember(id);
+    changed.forEach(function(tid){ updateTask(tid,{owner:v}); });
+  },
+  blank:function(e,el){
+    var id=+el.dataset.i,m=S.members[id];
+    set({importing:{id:id,method:'manual',note:'點一下＝有課（紅底），再點一下＝有事（灰底），第三下清空。兩者都視為不可用時段。'},
+      previewGrid:m.grid.map(function(r){return r.slice();}),
+      previewReason:(m.reason||mkGrid('')).map(function(r){return r.slice();})});
+  },
+  file:function(e,el){
+    var id=+el.dataset.i,file=el.files&&el.files[0]; if(!file)return;
+    if(/\.pdf$/i.test(file.name)||file.type==='application/pdf'){ importPDF(id,file); el.value=''; return; }
+    var reader=new FileReader(),isImg=/^image\//.test(file.type);
+    reader.onload=function(){
+      if(isImg){
+        set({importing:{id:id,method:'shot',imageUrl:reader.result,fileName:file.name,
+          note:'已載入截圖。請對照截圖點格子標記有課時段。'},previewGrid:mkGrid(true),previewReason:mkGrid('')});
+      }else{
+        var text=String(reader.result),isIcs=/^BEGIN:VCALENDAR/m.test(text),r=isIcs?parseICS(text):parseCSV(text);
+        S.members[id].subj=r.subj;
+        set({importing:{id:id,method:isIcs?'ics':'xlsx',fileName:file.name,
+          note:'已解析 '+file.name+'（'+r.kind+'）：辨識到 '+r.hits+' 節有課。可直接點格子修正。'},
+          previewGrid:r.grid,previewReason:mkGrid('')});
+      }
+    };
+    if(isImg)reader.readAsDataURL(file); else reader.readAsText(file);
+    el.value='';
+  },
+  cell:function(e,el){
+    var d=+el.dataset.d,p=+el.dataset.p,g=S.previewGrid,rs=S.previewReason||mkGrid('');
+    var cur=g[d][p]?'free':(rs[d][p]==='有事'?'有事':'有課');
+    if(cur==='free'){g[d][p]=false;rs[d][p]='有課';}
+    else if(cur==='有課'){g[d][p]=false;rs[d][p]='有事';}
+    else{g[d][p]=true;rs[d][p]='';}
+    set({previewGrid:g,previewReason:rs});
+  },
+  confirmImport:function(){
+    var im=S.importing,m=S.members[im.id];
+    m.grid=S.previewGrid; m.reason=S.previewReason||mkGrid(''); m.imported=true; m.method=im.method;
+    set({importing:null,previewGrid:null,previewReason:null});
+    writeMember(im.id);
+  },
+  cancelImport:function(){ set({importing:null,previewGrid:null,previewReason:null}); },
+  clearMember:function(e,el){
+    var id=+el.dataset.i,m=S.members[id];
+    m.grid=mkGrid(true); m.reason=mkGrid(''); m.imported=false; m.method='';
+    render();
+    writeMember(id);
+  },
+  assign:function(e,el){
+    if(S.locked)return;
+    var id=+el.dataset.i,key=el.dataset.k||null;
+    GROUPS.forEach(function(g){S.groups[g.key]=S.groups[g.key].filter(function(x){return x!==id;});});
+    if(key&&S.groups[key].length<3)S.groups[key].push(id);
+    render();
+    writeGroups();
+  },
+  clearGroups:function(){ S.groups={fuselage:[],wing:[],tail:[]}; render(); writeGroups(); },
+  autoGroup:function(){
+    var ids=S.members.map(function(m){return m.id;}),best=null;
+    for(var t=0;t<400;t++){
+      var sh=ids.slice();
+      for(var i=sh.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var tmp=sh[i];sh[i]=sh[j];sh[j]=tmp;}
+      var g={fuselage:sh.slice(0,3),wing:sh.slice(3,6),tail:sh.slice(6,9)};
+      var ns=GROUPS.map(function(x){var c=groupCommon(g[x.key]);return c.slots.filter(function(s){return s[0]<5;}).length;});
+      var score=Math.min.apply(null,ns)*2-(Math.max.apply(null,ns)-Math.min.apply(null,ns));
+      if(!best||score>best.score)best={score:score,g:g};
+    }
+    S.groups=best.g; render(); writeGroups();
+  },
+  toggleLock:function(){
+    var full=GROUPS.every(function(g){return S.groups[g.key].length===3;});
+    if(!S.locked&&!full)return;
+    var goingLocked=!S.locked;
+    S.locked=goingLocked; S.tab=goingLocked?'tasks':S.tab;
+    render();
+    writeGroups();
+  },
+  taskGroup:function(e,el){ set({taskGroup:el.dataset.k}); },
+  status:function(e,el){
+    var t=findTask(el.dataset.i); t.status=el.value; if(el.value==='已完成')t.pct=100;
+    render(); updateTask(t.id,{status:t.status,pct:t.pct});
+  },
+  pct:function(e,el){
+    var t=findTask(el.dataset.i),v=Number(el.value); t.pct=v;
+    if(v===100)t.status='已完成'; else if(v>0&&t.status==='待開始')t.status='進行中';
+    render(); updateTask(t.id,{pct:t.pct,status:t.status});
+  },
+  openTask:function(e,el){ set({openTask:el.dataset.i}); },
+  closeTask:function(){ set({openTask:null}); },
+  addLog:function(){
+    var inp=document.getElementById('logInput'); if(!inp||!inp.value.trim())return;
+    var d=new Date(),t=findTask(S.openTask);
+    t.logs.push({date:(d.getMonth()+1)+'/'+d.getDate(),text:inp.value.trim(),photo:''});
+    render(); updateTask(t.id,{logs:t.logs});
+  },
+  logPhoto:function(e,el){
+    var t=findTask(S.openTask),i=+el.dataset.i,file=el.files&&el.files[0]; if(!file)return;
+    uploadLogPhoto(file).then(function(url){
+      t.logs[i].photo=url;
+      render(); updateTask(t.id,{logs:t.logs});
+    }).catch(function(err){ alert('照片上傳失敗：'+err.message); });
+  },
+  delTask:function(e,el){
+    if(!confirm('刪除這項任務？'))return;
+    var id=el.dataset.i;
+    S.tasks=S.tasks.filter(function(t){return t.id!==id;}); S.openTask=null;
+    render(); deleteTask(id);
+  },
+  addTask:function(){
+    var base={group:S.taskGroup,title:'新任務',owner:S.members[0].name,date:'—',slot:'—',day:0,p0:4,p1:6,span:1};
+    var id=createTask(base);
+    S.tasks.push({id:id,group:base.group,title:base.title,owner:base.owner,date:base.date,slot:base.slot,
+      status:'待開始',pct:0,logs:[],day:base.day,p0:base.p0,p1:base.p1,span:base.span});
+    set({openTask:id});
+  },
+  editTitle:function(e,el){ var t=findTask(el.dataset.i); t.title=el.value; updateTask(t.id,{title:t.title}); },
+  editOwner:function(e,el){ var t=findTask(el.dataset.i); t.owner=el.value; updateTask(t.id,{owner:t.owner}); },
+  span:function(e,el){
+    var t=findTask(el.dataset.i); t.span=Math.max(1,Math.min(14,(t.span||1)+Number(el.dataset.k)));
+    render(); updateTask(t.id,{span:t.span});
+  },
+  draft:function(e,el){
+    set({conflict:'',draft:{day:+el.dataset.d,p0:+el.dataset.p,p1:+el.dataset.p,title:'',owner:S.members[0].name,group:S.taskGroup,date:'',monthIdx:S.monthIdx}});
+  },
+  draftDate:function(e,el){
+    var M=MONTHS[S.monthIdx],dnum=+el.dataset.n;
+    set({conflict:'',draft:{day:+el.dataset.d,p0:4,p1:6,title:'',owner:S.members[0].name,group:S.taskGroup,
+      date:M.month+'/'+(dnum<10?'0'+dnum:dnum),monthIdx:S.monthIdx}});
+  },
+  draftSet:function(e,el){
+    var k=el.dataset.k,v=el.value;
+    S.draft[k]=(k==='p0'||k==='p1'||k==='monthIdx')?Number(v):v;
+    if(k==='monthIdx')S.draft.date='';
+    set({conflict:''});
+  },
+  saveDraft:function(){
+    var d=S.draft,p1=Math.max(d.p0,d.p1);
+    var date=d.date||dateFor(d.day,d.monthIdx);
+    var clash=S.tasks.filter(function(t){return t.date===date&&!(p1<t.p0||d.p0>t.p1);})[0];
+    if(clash){ set({conflict:date+' 此時段已由「'+gname(clash.group)+'：'+clash.title+'」佔用，同一時段只能有一組進行，請改排其他節次或日期。'}); return; }
+    var slot='第'+(d.p0+1)+(p1>d.p0?'–'+(p1+1):'')+'節',title=d.title||'未命名任務';
+    var id=createTask({group:d.group,title:title,owner:d.owner,date:date,slot:slot,day:d.day,p0:d.p0,p1:p1,span:1});
+    S.tasks.push({id:id,group:d.group,title:title,owner:d.owner,date:date,slot:slot,status:'待開始',pct:0,logs:[],day:d.day,p0:d.p0,p1:p1,span:1});
+    set({draft:null,taskGroup:d.group,conflict:'',monthIdx:d.monthIdx});
+  },
+  cancelDraft:function(){ set({draft:null,conflict:''}); },
+  month:function(e,el){
+    var n=S.monthIdx+Number(el.dataset.k);
+    if(n<0||n>=MONTHS.length)return; set({monthIdx:n});
+  },
+  calFilter:function(e,el){ set({calFilter:el.dataset.k}); },
+  olFilter:function(){ set({olFilter:S.olFilter===false}); },
+  gatePick:function(e,el){
+    if(!GAS_URL){ set({gateError:'尚未連接後端，請先完成 Apps Script 設定。'}); return; }
+    var id=+el.dataset.i;
+    try{ localStorage.setItem(IDENTITY_KEY, JSON.stringify({myId:id})); }catch(e){}
+    set({myId:id,gateError:''});
+  },
+  switchIdentity:function(){
+    try{ localStorage.removeItem(IDENTITY_KEY); }catch(e){}
+    set({myId:null});
+  }
+};
+function findTask(id){ for(var i=0;i<S.tasks.length;i++) if(S.tasks[i].id===id) return S.tasks[i]; return null; }
+function dateFor(day,idx){
+  var M=MONTHS[idx||0],off=(day-M.startDow+7)%7,used={};
+  S.tasks.forEach(function(t){used[t.date]=1;});
+  var fmt=function(n){return M.month+'/'+(n<10?'0'+n:n);};
+  for(var wk=0;wk<6;wk++){var dn=1+off+7*wk; if(dn>M.days)break; if(!used[fmt(dn)])return fmt(dn);}
+  return fmt(1+off);
+}
+
+/* PDF 匯入：用 pdf.js 抽出文字，再套用課表解析（需連線一次載入函式庫） */
+function loadPdfJs(){
+  if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if(loadPdfJs._p) return loadPdfJs._p;
+  loadPdfJs._p = new Promise(function(res,rej){
+    var R=window.__resources||{};
+    var s=document.createElement('script');
+    s.src=R.pdfjs||'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s.onload=function(){
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc=R.pdfjsWorker||'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      res(window.pdfjsLib);
+    };
+    s.onerror=function(){ rej(new Error('無法載入 PDF 解析函式庫')); };
+    document.head.appendChild(s);
+  });
+  return loadPdfJs._p;
+}
+function pdfLines(page){
+  return page.getTextContent().then(function(tc){
+    var rows={};
+    tc.items.forEach(function(it){
+      if(!it.str||!it.str.trim())return;
+      var y=Math.round(it.transform[5]/4)*4;
+      (rows[y]=rows[y]||[]).push({x:it.transform[4],s:it.str});
+    });
+    return Object.keys(rows).sort(function(a,b){return b-a;}).map(function(y){
+      return rows[y].sort(function(a,b){return a.x-b.x;}).map(function(o){return o.s.trim();}).join(',');
+    });
+  });
+}
+function importPDF(id,file){
+  set({importing:{id:id,method:'xlsx',fileName:file.name,note:'正在解析 '+file.name+' …'},previewGrid:mkGrid(true),previewReason:mkGrid('')});
+  var reader=new FileReader();
+  reader.onload=function(){
+    var buf=reader.result;
+    loadPdfJs().then(function(lib){
+      return lib.getDocument({data:new Uint8Array(buf)}).promise;
+    }).then(function(doc){
+      var jobs=[];
+      for(var i=1;i<=doc.numPages;i++) jobs.push(doc.getPage(i).then(pdfLines));
+      return Promise.all(jobs);
+    }).then(function(pages){
+      var text=[].concat.apply([],pages).join('\n');
+      var r=parseCSV(text);
+      S.members[id].subj=r.subj;
+      set({importing:{id:id,method:'xlsx',fileName:file.name,
+        note:'已解析 '+file.name+'（PDF）：辨識到 '+r.hits+' 節有課。PDF 版面不一，請務必點格子核對修正。'},
+        previewGrid:r.grid,previewReason:mkGrid('')});
+    }).catch(function(err){
+      set({importing:{id:id,method:'manual',fileName:file.name,
+        note:'PDF 解析失敗（'+err.message+'）。請直接點格子手動標記，或改用 CSV／.ics 匯入。'},
+        previewGrid:mkGrid(true),previewReason:mkGrid('')});
+    });
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+/* 事件委派 */
+document.addEventListener('click',function(e){
+  var el=e.target.closest('[data-a]'); if(!el)return;
+  if(el.tagName==='INPUT'||el.tagName==='SELECT')return;
+  var fn=ACT[el.dataset.a]; if(fn){e.preventDefault();fn(e,el);}
+});
+document.addEventListener('change',function(e){
+  var el=e.target.closest('[data-a]'); if(!el)return;
+  if(el.tagName!=='INPUT'&&el.tagName!=='SELECT'&&el.tagName!=='TEXTAREA')return;
+  var fn=ACT[el.dataset.a]; if(fn)fn(e,el);
+});
+
+/* ─────────── 畫面 ─────────── */
+function render(){
+  if(!S.ready){ document.getElementById('app').innerHTML=viewLoading(); return; }
+  if(!GAS_URL){ document.getElementById('app').innerHTML=viewSetupNeeded(); return; }
+  if(S.myId==null){ document.getElementById('app').innerHTML=viewGate(); return; }
+  var act=active(),N=act.length,me=S.members[S.myId];
+  var h='';
+  h+='<div style="display:flex;align-items:baseline;gap:16px;padding:20px 32px;border-bottom:2px solid var(--divider);flex-wrap:wrap">'
+   + '<div style="font-family:var(--fh);font-weight:800;font-size:20px;letter-spacing:-.02em">無人機小組 · 時間協調系統</div>'
+   + '<div style="font-size:12px;color:var(--n600)">9 位組員 · 機身／主翼／尾翼 三組分工</div>'
+   + '<div style="margin-left:auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+   +   '<span style="font-size:11px;color:'+(S.online?'var(--n600)':'var(--accent-700)')+'">●&nbsp;'+(S.online?'即時同步中':'離線／連線中斷')+'</span>'
+   +   '<span style="font-size:12px;color:var(--n600)">已匯入 '+N+' / 9</span>'
+   +   '<span style="font-size:12px;color:var(--n600)">目前身份：<b style="color:var(--text)">'+esc(me?me.name:'')+'</b></span>'
+   +   '<button class="btn btn-ghost" data-a="switchIdentity" style="font-size:12px;padding:5px 9px">切換身份</button>'
+   +   '<button class="btn btn-ghost" data-a="reset" style="font-size:12px;padding:5px 9px">清除全部資料</button>'
+   + '</div></div>';
+  h+='<div class="tabbar">'+TABS.map(function(t){
+      return '<button data-a="tab" data-k="'+t[0]+'" aria-selected="'+(S.tab===t[0])+'">'+t[1]+'</button>';
+    }).join('')+'</div>';
+  h+=({import:viewImport,free:viewFree,overlap:viewOverlap,group:viewGroup,tasks:viewTasks,cal:viewCal,month:viewMonth,gantt:viewGantt}[S.tab]||viewImport)(act,N);
+  if(S.importing) h+=dlgImport();
+  if(S.draft) h+=dlgDraft(act);
+  if(S.openTask!=null&&findTask(S.openTask)) h+=dlgTask();
+  document.getElementById('app').innerHTML=h;
+}
+function viewLoading(){
+  return '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px">'
+   +'<div class="dialog" style="width:440px;max-width:94vw;text-align:center">'
+   +'<div style="font-family:var(--fh);font-weight:800;font-size:18px;margin-bottom:10px">連線中…</div>'
+   +'<div style="font-size:13px;color:var(--n600)">正在連接雲端資料庫，請稍候。</div></div></div>';
+}
+function viewSetupNeeded(){
+  return '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px">'
+   +'<div class="dialog" style="width:560px;max-width:94vw">'
+   +'<div style="font-family:var(--fh);font-weight:800;font-size:19px;margin-bottom:10px">尚未連接後端資料庫</div>'
+   +'<div style="font-size:13px;color:var(--n700);line-height:1.8">'+esc(S.gateError||'請依照 README.md 部署 Google Apps Script 並填入 apps-script-config.js。')+'</div></div></div>';
+}
+function viewGate(){
+  var h='<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px">'
+   +'<div class="dialog" style="width:540px;max-width:94vw">'
+   +'<div style="font-family:var(--fh);font-weight:800;font-size:22px;margin-bottom:6px">無人機小組 · 時間協調系統</div>'
+   +'<div style="font-size:13px;color:var(--n600);margin-bottom:20px;line-height:1.7">選擇你是哪一位組員即可開始，不需要帳號密碼。這台裝置之後每次打開這個網址都會記得你的身份，如果要換人使用，點右上角「切換身份」即可。</div>';
+  if(S.gateError) h+='<div style="background:var(--accent-100);border-left:4px solid var(--accent);padding:10px 12px;margin-bottom:14px;font-size:12.5px;color:var(--accent-900)">'+esc(S.gateError)+'</div>';
+  h+='<div style="font-size:11px;letter-spacing:.08em;color:var(--n600);margin-bottom:8px;font-weight:600">你是哪一位組員？</div>'
+   +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'
+   + S.members.map(function(m){return '<button class="btn" data-a="gatePick" data-i="'+m.id+'" style="font-size:13px;padding:10px 8px;text-align:center">'+esc(m.name)+'</button>';}).join('')
+   +'</div></div></div>';
+  return h;
+}
+
+function dayHead(){ return DAYS.map(function(d){return '<th style="padding:8px 10px;border-bottom:2px solid var(--divider);border-left:1px solid var(--n200)">'+d+'</th>';}).join(''); }
+
+/* ① 匯入 */
+function viewImport(){
+  var h='<div style="padding:32px">'
+   +'<div class="h1">課表匯入</div>'
+   +'<table class="data"><thead><tr><th>組員</th><th>狀態</th><th>本週空堂（平日／假日）</th><th style="width:230px">課表</th></tr></thead><tbody>';
+  S.members.forEach(function(m){
+    h+='<tr>'
+     +'<td><input class="input" data-a="rename" data-i="'+m.id+'" value="'+esc(m.name)+'" style="font-weight:600;width:120px;padding:4px 6px"></td>'
+     +'<td><span class="tag '+(m.imported?'tag-accent':'tag-outline')+'">'+(m.imported?'已匯入':'待匯入')+'</span></td>'
+     +'<td style="font-variant-numeric:tabular-nums">'+(m.imported?(function(){var f=freeSplit(m);return '平日 '+f.wd+' 節　假日 '+f.we+' 節';})():'—')+'</td>'
+     +'<td><div style="display:flex;gap:6px;flex-wrap:wrap">'
+     +'<button class="btn" data-a="blank" data-i="'+m.id+'" style="font-size:12px;padding:5px 10px">'+(m.imported?'編輯':'填寫')+'</button>'
+     +(m.imported?'<button class="btn btn-ghost" data-a="clearMember" data-i="'+m.id+'" style="font-size:12px;padding:5px 8px">清除</button>':'')
+     +'</div></td></tr>';
+  });
+  return h+'</tbody></table></div>';
+}
+
+/* ② 空堂總表 */
+function viewFree(act,N){
+  var h='<div style="padding:32px"><div class="h1">全員可用時間總表</div>'
+   +'<div class="sub">每格數字為該時段可出席人數（共 '+N+' 人已匯入）。顆色越深代表越多人有空；實作以平日為主，假日（週六、週日）僅作備援。</div>';
+  if(!N) return h+emptyHint('尚未匯入任何課表，請先到「① 匯入課表」填寫。')+'</div>';
+  h+='<div style="overflow-x:auto" class="panel"><table style="border-collapse:collapse;width:100%;font-size:12px"><thead><tr>'
+   +'<th style="padding:8px 10px;text-align:left;border-bottom:2px solid var(--divider);white-space:nowrap">節次</th>'
+   +'<th style="padding:8px 10px;text-align:left;border-bottom:2px solid var(--divider);white-space:nowrap">時間</th>'+dayHead()+'</tr></thead><tbody>';
+  var counts=[];
+  for(var p=0;p<13;p++){
+    h+='<tr><td style="padding:6px 10px;font-weight:600;border-bottom:1px solid var(--n200);white-space:nowrap">第 '+(p+1)+' 節</td>'
+     +'<td style="padding:6px 10px;color:var(--n600);border-bottom:1px solid var(--n200);white-space:nowrap;font-variant-numeric:tabular-nums">'+TIMES[p]+'</td>';
+    for(var d=0;d<7;d++){
+      var n=act.filter(function(m){return m.grid[d][p];}).length,r=N?n/N:0;
+      counts.push({d:d,p:p,n:n});
+      h+='<td class="grid-cell" style="background:'+(n===0?'var(--n100)':heat(r))+';color:'+heatText(r)+'">'+n+'</td>';
+    }
+    h+='</tr>';
+  }
+  h+='</tbody></table></div>';
+  var top=counts.filter(function(c){return c.d<5;}).sort(function(a,b){return b.n-a.n;}).slice(0,3);
+  var topWe=counts.filter(function(c){return c.d>=5;}).sort(function(a,b){return b.n-a.n;}).slice(0,1);
+  h+='<div style="display:flex;gap:32px;margin-top:20px;flex-wrap:wrap">'+top.map(function(c){
+    return '<div style="border-left:2px solid var(--accent);padding-left:12px">'
+     +'<div style="font-size:11px;letter-spacing:.1em;color:var(--n600)">平日最合時段（優先）</div>'
+     +'<div style="font-family:var(--fh);font-weight:700;font-size:16px">'+DAYS[c.d]+' 第'+(c.p+1)+'節</div>'
+     +'<div style="font-size:12px;color:var(--n700)">'+TIMES[c.p]+'　'+c.n+' 人可出席</div></div>';
+  }).join('')+topWe.map(function(c){
+    return '<div style="border-left:2px solid var(--n300);padding-left:12px">'
+     +'<div style="font-size:11px;letter-spacing:.1em;color:var(--n600)">假日備援時段</div>'
+     +'<div style="font-family:var(--fh);font-weight:700;font-size:16px;color:var(--n700)">'+DAYS[c.d]+' 第'+(c.p+1)+'節</div>'
+     +'<div style="font-size:12px;color:var(--n700)">'+TIMES[c.p]+'　'+c.n+' 人可出席</div></div>';
+  }).join('')+'</div>';
+  return h+'</div>';
+}
+function emptyHint(t){ return '<div class="panel" style="padding:24px;font-size:13px;color:var(--n600)">'+t+'</div>'; }
+
+/* ③ 重疊分析 */
+function viewOverlap(act,N){
+  var on=S.olFilter!==false;
+  var h='<div style="padding:32px"><div class="h1">兩兩重疊矩陣</div>'
+   +'<div class="sub" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap"><span>任兩位組員共同有空的節數（'
+   +(on?'已排除上午 10 點前（第 1–2 節）與週六、週日，每週最多 55 節':'含全部時段，每週最多 91 節')+'）。</span>'
+   +'<button class="btn" data-a="olFilter" style="font-size:12px;padding:5px 10px">'+(on?'改為計入全部時段':'排除早上與假日')+'</button></div>';
+  if(N<2) return h+emptyHint('至少需要 2 位組員的課表才能計算重疊。')+'</div>';
+  h+='<div style="display:grid;grid-template-columns:1fr 380px;gap:32px;align-items:start"><div>';
+  h+='<div style="overflow-x:auto" class="panel"><table style="border-collapse:collapse;font-size:12px;width:100%"><thead><tr><th style="padding:8px;border-bottom:2px solid var(--divider)"></th>'
+   + S.members.map(function(m){return '<th style="padding:8px 4px;border-bottom:2px solid var(--divider);font-weight:600">'+esc(m.name.slice(-2))+'</th>';}).join('')
+   +'</tr></thead><tbody>';
+  S.members.forEach(function(a,i){
+    h+='<tr><td style="padding:6px 10px;font-weight:600;white-space:nowrap;border-bottom:1px solid var(--n200)">'+esc(a.name)+'</td>';
+    S.members.forEach(function(b,j){
+      if(i===j){ h+='<td class="grid-cell" style="background:var(--n200);color:var(--n600)">—</td>'; return; }
+      var v=pairOverlap(a,b),r=Math.min(1,v/(on?50:70));
+      h+='<td class="grid-cell" style="background:'+heat(r)+';color:'+heatText(r)+'">'+v+'</td>';
+    });
+    h+='</tr>';
+  });
+  h+='</tbody></table></div></div><div>';
+  var pairs=[];
+  S.members.forEach(function(a,i){S.members.slice(i+1).forEach(function(b){pairs.push({pair:a.name.slice(-2)+' × '+b.name.slice(-2),n:pairOverlap(a,b)});});});
+  pairs.sort(function(a,b){return b.n-a.n;});
+  var max=pairs[0]?pairs[0].n||1:1;
+  h+='<div style="font-family:var(--fh);font-weight:700;font-size:15px;margin-bottom:12px">重疊節數排行榜</div><div style="border-top:2px solid var(--divider)">';
+  pairs.slice(0,14).forEach(function(p,i){
+    h+='<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--n200)">'
+     +'<div style="width:22px;font-size:11px;color:var(--n600);font-variant-numeric:tabular-nums">'+(i+1)+'</div>'
+     +'<div style="width:120px;font-size:13px">'+esc(p.pair)+'</div>'
+     +'<div style="flex:1;height:8px;background:var(--n200)"><div style="width:'+Math.round(p.n/max*100)+'%;height:100%;background:var(--accent)"></div></div>'
+     +'<div style="width:34px;text-align:right;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums">'+p.n+'</div></div>';
+  });
+  return h+'</div></div></div></div>';
+}
+
+/* ④ 分組模擬 */
+function viewGroup(){
+  var full=GROUPS.every(function(g){return S.groups[g.key].length===3;});
+  var cols=GROUPS.map(function(g){
+    var ids=S.groups[g.key],c=groupCommon(ids);
+    return {g:g,ids:ids,n:ids.length===3?c.slots.filter(function(s){return s[0]<5;}).length:0,slots:c.slots};
+  });
+  var ns=cols.map(function(c){return c.n;});
+  var balance=full?'目前三組平日共同空堂為 '+ns.join('／')+' 節，落差 '+(Math.max.apply(null,ns)-Math.min.apply(null,ns))+' 節。':'';
+  var h='<div style="padding:32px">'
+   +'<div style="display:flex;align-items:baseline;gap:16px;margin-bottom:6px"><div class="h1" style="margin:0">三組分組模擬</div>'
+   +'<span class="tag '+(S.locked?'tag-accent':'tag-outline')+'">'+(S.locked?'已鎖定':'模擬中')+'</span></div>'
+   +'<div class="sub">點選組員右側按鈕指派到各組，系統即時計算「三人平日共同有空節數」，假日另列為備援。'+balance+'</div>';
+  h+='<div class="cols3" style="margin-bottom:28px">'+cols.map(function(c){
+    return '<div style="padding:20px">'
+     +'<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:12px"><div style="font-family:var(--fh);font-weight:800;font-size:19px">'+c.g.name+'</div>'
+     +'<div style="margin-left:auto;font-size:12px;color:var(--n600)">'+c.ids.length+'/3 人</div></div>'
+     +'<div style="font-size:36px;font-family:var(--fh);font-weight:800;line-height:1;color:var(--accent)">'+(c.ids.length===3?c.n:'—')+'</div>'
+     +'<div style="font-size:11px;letter-spacing:.1em;color:var(--n600);margin-bottom:14px">三人平日共同空堂節數／週</div>'
+     +'<div style="display:flex;flex-direction:column;gap:4px;min-height:70px">'+c.ids.map(function(i){
+        return '<div style="font-size:13px;border-bottom:1px solid var(--n200);padding-bottom:4px">'+esc(S.members[i].name)+'</div>';}).join('')+'</div>'
+     +'<div style="margin-top:12px;font-size:11.5px;color:var(--n700);line-height:1.7;white-space:pre-line">'+(c.ids.length===3?slotSummary(c.slots):'請指派 3 位組員')+'</div></div>';
+  }).join('')+'</div>';
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:start"><div>'
+   +'<div style="font-family:var(--fh);font-weight:700;font-size:15px;margin-bottom:10px">指派組員</div><div style="border-top:2px solid var(--divider)">';
+  S.members.forEach(function(m){
+    var cur=GROUPS.filter(function(g){return S.groups[g.key].indexOf(m.id)>=0;})[0];
+    h+='<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--n200)">'
+     +'<div style="width:90px;font-size:13.5px;font-weight:600">'+esc(m.name)+'</div>'
+     +'<div style="font-size:11.5px;color:var(--n600);width:130px">平日 '+freeSplit(m).wd+'　假日 '+freeSplit(m).we+'</div>'
+     +'<div style="display:flex;gap:4px;margin-left:auto">'
+     + GROUPS.concat([{key:'',name:'移除'}]).map(function(b){
+        var on=cur&&b.key===cur.key;
+        return '<button data-a="assign" data-i="'+m.id+'" data-k="'+b.key+'" style="border:1px solid '+(on?'var(--accent)':'var(--n300)')+';background:'+(on?'var(--accent)':'#fff')+';color:'+(on?'#fff':'var(--text)')+';font:600 12px var(--fb);padding:5px 9px;cursor:'+(S.locked?'not-allowed':'pointer')+';opacity:'+(S.locked?.45:1)+'">'+b.name.slice(0,2)+'</button>';
+      }).join('')
+     +'</div></div>';
+  });
+  h+='</div></div><div>'
+   +'<div style="font-family:var(--fh);font-weight:700;font-size:15px;margin-bottom:10px">系統建議</div>'
+   +'<div class="panel" style="padding:18px"><div style="font-size:13px;line-height:1.8;color:var(--n800)">'
+   +(full?balance+(Math.max.apply(null,ns)-Math.min.apply(null,ns)>8?' 建議互換落差最大的兩組各一人，或直接使用自動配對。':' 分佈相當平均，可直接鎖定。')
+        :'請將 9 位組員分配至三組（每組 3 人）。系統會即時計算三人共同空堂節數，並提示三組之間的落差。')
+   +'</div><div style="display:flex;gap:8px;margin-top:16px"><button class="btn" data-a="autoGroup">自動配對最平均分法</button>'
+   +'<button class="btn btn-ghost" data-a="clearGroups">清空</button></div></div>'
+   +'<div style="margin-top:16px"><button class="btn btn-primary" data-a="toggleLock"'+(!S.locked&&!full?' disabled':'')+'>'+(S.locked?'解除鎖定，重新模擬':'鎖定分組並進入進度管理')+'</button></div>'
+   +'</div></div></div>';
+  return h;
+}
+
+/* ⑤ 任務與進度 */
+function viewTasks(){
+  var h='<div style="padding:32px"><div class="h1">進度總覽</div>';
+  h+='<div class="cols3" style="margin-bottom:12px">'+GROUPS.map(function(g){
+    var ts=S.tasks.filter(function(t){return t.group===g.key;});
+    var pct=ts.length?Math.round(ts.reduce(function(a,t){return a+t.pct;},0)/ts.length):0;
+    return '<div style="padding:20px"><div style="font-family:var(--fh);font-weight:800;font-size:18px;margin-bottom:12px">'+g.name+'</div>'
+     +'<div style="display:flex;align-items:baseline;gap:8px"><div style="font-size:40px;font-family:var(--fh);font-weight:800;line-height:1">'+pct+'</div><div style="font-size:14px;color:var(--n600)">%</div></div>'
+     +'<div style="height:10px;background:var(--n200);margin:10px 0"><div style="width:'+pct+'%;height:100%;background:var(--accent)"></div></div>'
+     +'<div style="font-size:12px;color:var(--n700)">'+ts.length+' 項任務 · 已完成 '+ts.filter(function(t){return t.status==='已完成';}).length+' · 延遲 '+ts.filter(function(t){return t.status==='延遲';}).length+'</div></div>';
+  }).join('')+'</div>';
+  var blocked=S.tasks.filter(function(t){return t.status==='延遲';}).map(function(t){return gname(t.group)+'　'+t.title+'　'+(t.logs.length?t.logs[t.logs.length-1].text:'');});
+  var recent=[];
+  S.tasks.forEach(function(t){t.logs.forEach(function(l){recent.push(l.date+'　'+gname(t.group)+'　'+l.text);});});
+  recent=recent.slice(-4).reverse();
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px;background:var(--divider);border:2px solid var(--divider);margin-bottom:32px">'
+   +'<div style="background:#fff;padding:18px"><div style="font-size:11px;letter-spacing:.12em;color:var(--accent-700);font-weight:700;margin-bottom:10px">目前卡關</div>'
+   +(blocked.length?blocked:['目前沒有延遲中的任務']).map(function(b){return '<div style="font-size:13px;padding:5px 0;border-bottom:1px solid var(--n200)">'+esc(b)+'</div>';}).join('')+'</div>'
+   +'<div style="background:#fff;padding:18px"><div style="font-size:11px;letter-spacing:.12em;color:var(--n600);font-weight:700;margin-bottom:10px">最近更新</div>'
+   +(recent.length?recent:['尚無進度紀錄']).map(function(r){return '<div style="font-size:13px;padding:5px 0;border-bottom:1px solid var(--n200)">'+esc(r)+'</div>';}).join('')+'</div></div>';
+  h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">'+GROUPS.map(function(g){
+      return '<button data-a="taskGroup" data-k="'+g.key+'" style="border:2px solid var(--divider);background:'+(S.taskGroup===g.key?'var(--text)':'#fff')+';color:'+(S.taskGroup===g.key?'#fff':'var(--text)')+';font:600 13px var(--fh);padding:8px 16px;cursor:pointer">'+g.name+'</button>';
+    }).join('')+'<button class="btn" data-a="addTask" style="margin-left:auto">＋ 新增任務</button></div>';
+  var rows=S.tasks.filter(function(t){return t.group===S.taskGroup;});
+  h+='<table class="data"><thead><tr><th style="width:44px">編號</th><th>任務內容</th><th style="width:110px">負責</th><th style="width:150px">預定日期／時段</th><th style="width:110px">狀態</th><th style="width:190px">進度</th><th style="width:110px"></th></tr></thead><tbody>';
+  if(!rows.length) h+='<tr><td colspan="7" style="color:var(--n600);padding:18px 10px">此組尚未有任務。點「＋ 新增任務」，或到週行程表／月行事曆點時段排入。</td></tr>';
+  rows.forEach(function(t,i){
+    h+='<tr>'
+     +'<td style="font-variant-numeric:tabular-nums;color:var(--n600)">'+String(i+1).padStart(2,'0')+'</td>'
+     +'<td><input class="input" data-a="editTitle" data-i="'+t.id+'" value="'+esc(t.title)+'" style="font-weight:600;padding:4px 6px">'
+     +'<div style="font-size:11.5px;color:var(--n600);margin-top:3px">'+(t.logs.length?'最新：'+esc(t.logs[t.logs.length-1].date+' '+t.logs[t.logs.length-1].text):'尚無進度紀錄')+'</div></td>'
+     +'<td><input class="input" data-a="editOwner" data-i="'+t.id+'" value="'+esc(t.owner)+'" style="padding:4px 6px"></td>'
+     +'<td style="font-size:12px">'+esc(t.date)+'　'+esc(t.slot)+'</td>'
+     +'<td><select class="input" data-a="status" data-i="'+t.id+'" style="font-size:12px;padding:4px 6px">'
+     + ['待開始','進行中','已完成','延遲'].map(function(o){return '<option'+(t.status===o?' selected':'')+'>'+o+'</option>';}).join('')+'</select></td>'
+     +'<td><div style="display:flex;align-items:center;gap:8px"><input type="range" min="0" max="100" step="5" value="'+t.pct+'" data-a="pct" data-i="'+t.id+'" style="flex:1"><div style="width:38px;text-align:right;font-size:12px;font-variant-numeric:tabular-nums">'+t.pct+'%</div></div></td>'
+     +'<td><div style="display:flex;gap:4px"><button class="btn btn-ghost" data-a="openTask" data-i="'+t.id+'" style="font-size:12px;padding:4px 8px">紀錄</button>'
+     +'<button class="btn btn-ghost" data-a="delTask" data-i="'+t.id+'" style="font-size:12px;padding:4px 6px;color:var(--accent-700)">刪</button></div></td></tr>';
+  });
+  return h+'</tbody></table></div>';
+}
+
+/* ⑥ 週行程表 */
+function viewCal(act,N){
+  var M=MONTHS[S.monthIdx];
+  var GC={fuselage:{bg:'var(--accent)',fg:'#fff'},wing:{bg:'var(--text)',fg:'#fff'},tail:{bg:'#fff',fg:'var(--text)'}};
+  var h='<div style="padding:32px">'
+   +'<div style="display:flex;align-items:baseline;gap:16px;margin-bottom:6px;flex-wrap:wrap"><div class="h1" style="margin:0">週行程表</div>'
+   +'<div style="font-size:12px;color:var(--n600)">'+M.year+' 年 '+M.month+' 月</div>'+monthNav()
+   +'<div style="display:flex;gap:14px;margin-left:auto;align-items:center;font-size:11.5px">'
+   +'<div style="display:flex;align-items:center;gap:6px"><span style="width:14px;height:14px;background:var(--accent);display:inline-block"></span>機身組</div>'
+   +'<div style="display:flex;align-items:center;gap:6px"><span style="width:14px;height:14px;background:var(--text);display:inline-block"></span>主翼組</div>'
+   +'<div style="display:flex;align-items:center;gap:6px"><span style="width:14px;height:14px;background:#fff;border:2px solid var(--accent);display:inline-block"></span>尾翼組</div></div></div>'
+   +'<div class="sub">底色深淺代表該時段可出席人數。點空白格直接排入任務，點已排入的區塊可查看／更新進度紀錄。同一時段只允許一組進場。</div>';
+  // 建議獨占時段
+  var taken={};
+  h+='<div class="panel" style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px;padding:18px;margin-bottom:20px">'+GROUPS.map(function(g){
+    var ids=S.groups[g.key],text='尚未完成分組';
+    if(ids.length===3){
+      var cand=groupCommon(ids).slots.filter(function(s){return s[0]<5;}),picked=[];
+      cand.forEach(function(s){var k=s[0]+':'+s[1];if(taken[k]||picked.length>=6)return;taken[k]=1;picked.push(s);});
+      var by={};picked.forEach(function(s){(by[s[0]]=by[s[0]]||[]).push(s[1]+1);});
+      text=Object.keys(by).length?Object.keys(by).map(function(d){return DAYS[d]+' 第'+by[d].join('、')+'節';}).join('　／　'):'平日已無可獨占時段，建議調整分組';
+    }
+    return '<div style="border-left:4px solid '+(g.key==='wing'?'var(--text)':'var(--accent)')+';padding-left:12px">'
+     +'<div style="font-size:11px;letter-spacing:.1em;color:var(--n600);margin-bottom:4px">建議獨占時段（平日優先）</div>'
+     +'<div style="font-family:var(--fh);font-weight:700;font-size:15px;margin-bottom:4px">'+g.name+'</div>'
+     +'<div style="font-size:12.5px;line-height:1.6;color:var(--n800)">'+text+'</div></div>';
+  }).join('')+'</div>';
+  h+='<div style="overflow-x:auto" class="panel"><table style="border-collapse:collapse;width:100%;table-layout:fixed"><thead><tr>'
+   +'<th style="padding:8px 10px;text-align:left;border-bottom:2px solid var(--divider);width:132px;font-size:12px">節次／時間</th>'+dayHead()+'</tr></thead><tbody>';
+  for(var p=0;p<13;p++){
+    h+='<tr><td style="padding:5px 10px;border-bottom:1px solid var(--n200);white-space:nowrap;font-size:11.5px;font-variant-numeric:tabular-nums"><span style="font-weight:600">第 '+(p+1)+' 節</span>　<span style="color:var(--n600)">'+TIMES[p]+'</span></td>';
+    for(var d=0;d<7;d++){
+      var n=act.filter(function(m){return m.grid[d][p];}).length,r=N?n/N:0;
+      var t=null;
+      for(var i=0;i<S.tasks.length;i++){var x=S.tasks[i];
+        if(x.day===d&&p>=x.p0&&p<=x.p1&&Number(String(x.date).split('/')[0])===M.month){t=x;break;}}
+      var first=t&&t.p0===p,g=t?GC[t.group]:null;
+      var style='padding:5px 7px;height:34px;vertical-align:top;cursor:pointer;font-size:11px;line-height:1.35;'
+        +'border-bottom:'+(t&&!first?'0':'1px solid var(--n200)')+';border-left:1px solid var(--n200);'
+        +(t&&t.group==='tail'?'outline:2px solid var(--accent);outline-offset:-2px;':'')
+        +'background:'+(t?g.bg:(n===0?'var(--n100)':heat(r*0.22)))+';color:'+(t?g.fg:'var(--n500)')+';'
+        +(t&&t.status==='已完成'?'text-decoration:line-through;':'');
+      var attrs=t?'data-a="openTask" data-i="'+t.id+'"':'data-a="draft" data-d="'+d+'" data-p="'+p+'"';
+      h+='<td style="'+style+'" '+attrs+'>'
+       +(first?'<div style="font-weight:700;font-size:12px">'+esc(t.title)+'</div><div>'+gname(t.group)+'　'+esc(t.owner)+'　'+t.pct+'%</div>'
+             :(t?'':'<div>'+(n?n+' 人有空':'')+'</div>'))+'</td>';
+    }
+    h+='</tr>';
+  }
+  return h+'</tbody></table></div></div>';
+}
+function monthNav(){
+  return '<div style="display:flex;gap:6px">'
+   +'<button data-a="month" data-k="-1" class="btn" style="font-size:12.5px;padding:6px 14px"'+(S.monthIdx<=0?' disabled':'')+'>‹ 上個月</button>'
+   +'<button data-a="month" data-k="1" class="btn" style="font-size:12.5px;padding:6px 14px"'+(S.monthIdx>=MONTHS.length-1?' disabled':'')+'>下個月 ›</button></div>';
+}
+
+/* ⑦ 月行事曆 */
+function viewMonth(){
+  var M=MONTHS[S.monthIdx],byDate={},monthTasks=[];
+  S.tasks.forEach(function(t){
+    var m=/^(\d+)\/(\d+)$/.exec(t.date);
+    if(m&&Number(m[1])===M.month){(byDate[Number(m[2])]=byDate[Number(m[2])]||[]).push(t);monthTasks.push(t);}
+  });
+  var h='<div style="padding:32px">'
+   +'<div style="display:flex;align-items:baseline;gap:16px;margin-bottom:6px;flex-wrap:wrap"><div class="h1" style="margin:0">'+M.year+' 年 '+M.month+' 月</div>'
+   +'<div style="font-size:12px;color:var(--n600)">'+monthTasks.length+' 項任務排入本月</div>'
+   +'<div style="display:flex;gap:6px;margin-left:auto;flex-wrap:wrap">'+monthNav()
+   +[['weekday','只看平日'],['holiday','只看假日'],['all','全部']].map(function(f){
+      return '<button data-a="calFilter" data-k="'+f[0]+'" style="border:2px solid var(--divider);background:'+(S.calFilter===f[0]?'var(--text)':'#fff')+';color:'+(S.calFilter===f[0]?'#fff':'var(--text)')+';font:600 12.5px var(--fh);padding:6px 14px;cursor:pointer">'+f[1]+'</button>';
+    }).join('')+'</div></div>';
+  h+='<div class="cols3" style="margin-bottom:16px">'+GROUPS.map(function(g){
+    var ts=monthTasks.filter(function(t){return t.group===g.key;});
+    var pct=ts.length?Math.round(ts.reduce(function(a,t){return a+t.pct;},0)/ts.length):0;
+    return '<div style="padding:14px 16px"><div style="display:flex;align-items:baseline;gap:8px">'
+     +'<div style="font-family:var(--fh);font-weight:700;font-size:15px">'+g.name+'</div>'
+     +'<div style="margin-left:auto;font-family:var(--fh);font-weight:800;font-size:18px">'+(ts.length?pct+'%':'—')+'</div></div>'
+     +'<div style="height:8px;background:var(--n200);margin:8px 0 6px"><div style="width:'+pct+'%;height:100%;background:'+(g.key==='wing'?'var(--text)':'var(--accent)')+'"></div></div>'
+     +'<div style="font-size:11.5px;color:var(--n600)">'+ts.length+' 項任務 · 已完成 '+ts.filter(function(t){return t.status==='已完成';}).length+'</div></div>';
+  }).join('')+'</div>';
+  h+='<div class="sub">實作以平日為主；假日與國定假日以紅底標示。點日期可排入任務，點任務可開啟進度紀錄。</div>';
+  h+='<div class="panel"><table style="border-collapse:collapse;width:100%;table-layout:fixed"><thead><tr>'
+   +DAYS.map(function(d){return '<th style="padding:8px;border-bottom:2px solid var(--divider);border-left:1px solid var(--n200);font-size:12.5px">'+d+'</th>';}).join('')+'</tr></thead><tbody>';
+  var cells=[];for(var i=0;i<M.startDow;i++)cells.push(null);
+  for(var dn=1;dn<=M.days;dn++)cells.push(dn);
+  while(cells.length%7)cells.push(null);
+  for(var w=0;w<cells.length;w+=7){
+    h+='<tr>';
+    cells.slice(w,w+7).forEach(function(dnum,col){
+      var wknd=col>=5,hol=dnum?HOLIDAYS[M.month+'/'+dnum]:null,off=wknd||!!hol;
+      var show=!dnum?true:(S.calFilter==='all'||(S.calFilter==='weekday'?!off:off));
+      var bg=!dnum?'var(--n100)':hol?'var(--accent-100)':wknd?'var(--n100)':'#fff';
+      h+='<td style="vertical-align:top;height:96px;padding:6px 7px;cursor:'+(dnum?'pointer':'default')+';border-left:1px solid var(--n200);border-bottom:1px solid var(--n200);background:'+bg+';opacity:'+(show?1:.28)+'"'
+       +(dnum?' data-a="draftDate" data-n="'+dnum+'" data-d="'+col+'"':'')+'>'
+       +'<div style="display:flex;align-items:baseline;gap:6px"><div style="font-family:var(--fh);font-weight:700;font-size:13px;color:'+(off?'var(--accent-700)':'var(--text)')+'">'+(dnum||'')+'</div>'
+       +'<div style="font-size:10.5px;color:var(--accent-700);font-weight:600">'+(hol||'')+'</div></div>';
+      if(show)(byDate[dnum]||[]).forEach(function(t){
+        h+='<div data-a="openTask" data-i="'+t.id+'" style="font-size:10.5px;line-height:1.3;padding:3px 5px;margin-top:3px;cursor:pointer;font-weight:600;word-break:break-word;'
+         +'background:'+(t.group==='fuselage'?'var(--accent)':t.group==='wing'?'var(--text)':'#fff')+';'
+         +'color:'+(t.group==='tail'?'var(--text)':'#fff')+';border:2px solid '+(t.group==='tail'?'var(--accent)':'transparent')+'">'+esc(t.title)+'</div>';
+      });
+      h+='</td>';
+    });
+    h+='</tr>';
+  }
+  h+='</tbody></table></div>';
+  h+='<div style="margin-top:32px"><div style="font-family:var(--fh);font-weight:700;font-size:15px;margin-bottom:10px">國定假日（參考）</div>'
+   +'<div style="border-top:2px solid var(--divider);display:grid;grid-template-columns:repeat(4,1fr);gap:0 32px">'
+   +YEAR_HOLIDAYS.map(function(x){return '<div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--n200)">'
+     +'<div style="width:88px;font-size:12px;color:var(--n600);font-variant-numeric:tabular-nums">'+x.date+'</div><div style="font-size:13px">'+x.name+'</div></div>';}).join('')
+   +'</div><div style="font-size:11.5px;color:var(--n600);margin-top:12px;line-height:1.7">假日不排入預設工作時段，僅在平日時段不足時作為備援；補班補假請依學校行事曆確認。</div></div>';
+  return h+'</div>';
+}
+
+/* ⑧ 甘特圖 */
+function viewGantt(){
+  var M=MONTHS[S.monthIdx],monthTasks=S.tasks.filter(function(t){
+    var m=/^(\d+)\/(\d+)$/.exec(t.date); return m&&Number(m[1])===M.month;});
+  var dayMeta=[];
+  for(var i=1;i<=M.days;i++){
+    var col=(M.startDow+i-1)%7;
+    dayMeta.push({n:i,off:col>=5||!!HOLIDAYS[M.month+'/'+i],dow:DAYS[col].slice(1)});
+  }
+  var gridCss='display:grid;grid-template-columns:repeat('+M.days+',minmax(18px,1fr));position:relative';
+  var h='<div style="padding:32px">'
+   +'<div style="display:flex;align-items:baseline;gap:16px;margin-bottom:6px;flex-wrap:wrap"><div class="h1" style="margin:0">任務規劃甘特圖</div>'
+   +'<div style="font-size:12px;color:var(--n600)">'+M.year+' 年 '+M.month+' 月</div><div style="margin-left:auto">'+monthNav()+'</div></div>'
+   +'<div class="sub">橫條長度為任務工期，內部淺色區塊代表完成百分比。用 ＋／－ 調整天數，點橫條開啟進度紀錄。灰底為週末與國定假日。</div>';
+  if(!monthTasks.length) return h+emptyHint('本月尚未排入任務，可到月行事曆點日期新增。')+'</div>';
+  h+='<div class="panel" style="overflow-x:auto"><div style="display:grid;grid-template-columns:260px 1fr;min-width:900px">'
+   +'<div style="border-bottom:2px solid var(--divider);padding:6px 12px;font-size:11px;letter-spacing:.1em;color:var(--n600)">任務／負責</div>'
+   +'<div style="'+gridCss+';border-bottom:2px solid var(--divider)">'+dayMeta.map(function(d){
+      return '<div style="grid-column:'+d.n+'/span 1;text-align:center;font-size:9.5px;line-height:1.2;padding:3px 0;color:'+(d.off?'var(--accent-700)':'var(--n600)')+';background:'+(d.off?'var(--accent-100)':'transparent')+'">'+d.n+'<div style="font-size:8.5px">'+d.dow+'</div></div>';
+    }).join('')+'</div>';
+  GROUPS.forEach(function(g){
+    monthTasks.filter(function(t){return t.group===g.key;}).forEach(function(t){
+      var start=Number(String(t.date).split('/')[1]),span=Math.min(t.span||1,M.days-start+1);
+      var fill=g.key==='fuselage'?'var(--accent)':g.key==='wing'?'var(--text)':'#fff';
+      h+='<div style="display:flex;align-items:center;gap:8px;padding:5px 12px;border-top:1px solid var(--n200)">'
+       +'<div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.title)+'</div>'
+       +'<div style="font-size:10.5px;color:var(--n600);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+g.name+'　'+esc(t.owner)+'　'+t.date+'　'+span+' 天　'+t.pct+'%</div></div>'
+       +'<div style="display:flex;gap:3px"><button data-a="span" data-i="'+t.id+'" data-k="-1" style="border:1px solid var(--n300);background:#fff;width:22px;height:22px;cursor:pointer;font:600 12px var(--fb)">−</button>'
+       +'<button data-a="span" data-i="'+t.id+'" data-k="1" style="border:1px solid var(--n300);background:#fff;width:22px;height:22px;cursor:pointer;font:600 12px var(--fb)">＋</button></div></div>'
+       +'<div style="'+gridCss+';border-top:1px solid var(--n200)">'
+       +dayMeta.map(function(d){return '<div style="grid-column:'+d.n+'/span 1;grid-row:1;height:26px;border-left:1px solid var(--n200);background:'+(d.off?'var(--n100)':'#fff')+'"></div>';}).join('')
+       +'<div data-a="openTask" data-i="'+t.id+'" style="grid-column:'+start+'/span '+span+';grid-row:1;height:26px;position:relative;background:'+fill+';border:2px solid '+(g.key==='tail'?'var(--accent)':'transparent')+';display:flex;align-items:center;padding:0 4px;cursor:pointer;z-index:1">'
+       +'<div style="position:absolute;left:0;top:0;height:100%;width:'+t.pct+'%;background:rgba(255,255,255,.32)"></div>'
+       +'<div style="position:relative;font-size:10.5px;font-weight:700;color:'+(g.key==='tail'?'var(--text)':'#fff')+';white-space:nowrap">'+(span>=2?t.pct+'%':'')+'</div></div></div>';
+    });
+  });
+  return h+'</div></div></div>';
+}
+
+/* ─────────── 對話框 ─────────── */
+function dlgImport(){
+  var im=S.importing,m=S.members[im.id];
+  var h='<div class="backdrop"><div class="dialog" style="width:860px;max-width:94vw">'
+   +'<div style="font-family:var(--fh);font-weight:800;font-size:20px">'+esc(m.name)+'　課表填寫</div>'
+   +'<div style="font-size:12.5px;color:var(--n600);margin:6px 0 16px">'+esc(im.note||'')+'（中午 12:10–13:00 用餐時間不列入計算）</div>';
+  if(im.imageUrl)
+    h+='<div class="panel" style="margin-bottom:14px;padding:8px"><div style="font-size:11px;letter-spacing:.1em;color:var(--n600);margin-bottom:6px">你上傳的課表截圖</div>'
+     +'<div style="height:280px;background-image:url('+im.imageUrl+');background-size:contain;background-repeat:no-repeat;background-position:left top"></div></div>';
+  h+='<div style="overflow-x:auto;border:2px solid var(--divider)"><table style="border-collapse:collapse;font-size:11.5px;width:100%;background:#fff"><thead><tr>'
+   +'<th style="padding:6px;border-bottom:2px solid var(--divider);text-align:left">節次</th>'
+   +DAYS.map(function(d){return '<th style="padding:6px;border-bottom:2px solid var(--divider)">'+d+'</th>';}).join('')+'</tr></thead><tbody>';
+  for(var p=0;p<13;p++){
+    h+='<tr><td style="padding:4px 6px;white-space:nowrap;border-bottom:1px solid var(--n200)">第'+(p+1)+'節 '+TIMES[p]+'</td>';
+    for(var d=0;d<7;d++){
+      var busy=!S.previewGrid[d][p];
+      var reason=(S.previewReason&&S.previewReason[d])?S.previewReason[d][p]:'';
+      var subj=(m.subj&&m.subj[d])?m.subj[d][p]:'';
+      h+='<td data-a="cell" data-d="'+d+'" data-p="'+p+'" style="padding:4px 6px;text-align:center;cursor:pointer;min-width:62px;border-bottom:1px solid var(--n200);font-size:11px;'
+       +'background:'+(busy?(reason==='有事'?'var(--n300)':'var(--accent-200)'):'#fff')+'">'
+       +(busy?esc(reason||subj||'有課'):'')+'</td>';
+    }
+    h+='</tr>';
+  }
+  h+='</tbody></table></div>'
+   +'<div style="display:flex;gap:16px;align-items:center;font-size:11.5px;color:var(--n600);margin-top:10px;flex-wrap:wrap">'
+   +'<div style="display:flex;align-items:center;gap:6px"><span style="width:14px;height:14px;background:var(--accent-200);display:inline-block"></span>有課</div>'
+   +'<div style="display:flex;align-items:center;gap:6px"><span style="width:14px;height:14px;background:var(--n300);display:inline-block"></span>有事（打工、社團、家教…）</div>'
+   +'<div style="display:flex;align-items:center;gap:6px"><span style="width:14px;height:14px;background:#fff;border:1px solid var(--n300);display:inline-block"></span>空堂</div>'
+   +'<div>連續點同一格可循環切換。</div></div>'
+   +'<div style="display:flex;gap:8px;margin-top:18px"><button class="btn btn-primary" data-a="confirmImport">確認並套用</button>'
+   +'<button class="btn btn-ghost" data-a="cancelImport">取消</button></div></div></div>';
+  return h;
+}
+function dlgDraft(act){
+  var d=S.draft,M=MONTHS[d.monthIdx];
+  var freeNames=act.filter(function(m){
+    for(var p=d.p0;p<=Math.max(d.p0,d.p1);p++) if(!m.grid[d.day][p]) return false; return true;
+  }).map(function(m){return m.name;}).join('、')||'此時段無人全程有空';
+  var h='<div class="backdrop"><div class="dialog" style="width:520px;max-width:94vw">'
+   +'<div style="font-family:var(--fh);font-weight:800;font-size:19px">排入任務　'+DAYS[d.day]+'</div>';
+  if(S.conflict) h+='<div style="background:var(--accent-100);border-left:4px solid var(--accent);padding:10px 12px;margin-top:10px;font-size:12.5px;color:var(--accent-900)">'+esc(S.conflict)+'</div>';
+  h+='<div style="font-size:12px;color:var(--n600);margin:6px 0 16px">排定日期：'+(d.date?d.date+'（'+DAYS[d.day]+'）':M.month+' 月最近一個'+DAYS[d.day])+'　·　此時段全程有空：'+esc(freeNames)+'</div>'
+   +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+   +'<div class="field" style="grid-column:1/3"><label>月份</label><select class="input" data-a="draftSet" data-k="monthIdx">'
+   + MONTHS.map(function(m,i){return '<option value="'+i+'"'+(d.monthIdx===i?' selected':'')+'>'+m.year+' 年 '+m.month+' 月</option>';}).join('')+'</select></div>'
+   +'<div class="field" style="grid-column:1/3"><label>任務內容</label><input class="input" data-a="draftSet" data-k="title" value="'+esc(d.title)+'" placeholder="例如：主翼蒙皮貼合"></div>'
+   +'<div class="field"><label>組別</label><select class="input" data-a="draftSet" data-k="group">'
+   + GROUPS.map(function(g){return '<option value="'+g.key+'"'+(d.group===g.key?' selected':'')+'>'+g.name+'</option>';}).join('')+'</select></div>'
+   +'<div class="field"><label>負責組員</label><select class="input" data-a="draftSet" data-k="owner">'
+   + S.members.map(function(m){return '<option'+(d.owner===m.name?' selected':'')+'>'+esc(m.name)+'</option>';}).join('')+'</select></div>'
+   +'<div class="field"><label>起始節次</label><select class="input" data-a="draftSet" data-k="p0">'
+   + TIMES.map(function(t,i){return '<option value="'+i+'"'+(d.p0===i?' selected':'')+'>第'+(i+1)+'節 '+t+'</option>';}).join('')+'</select></div>'
+   +'<div class="field"><label>結束節次</label><select class="input" data-a="draftSet" data-k="p1">'
+   + TIMES.map(function(t,i){return '<option value="'+i+'"'+(d.p1===i?' selected':'')+'>第'+(i+1)+'節 '+t+'</option>';}).join('')+'</select></div>'
+   +'</div><div style="display:flex;gap:8px;margin-top:18px"><button class="btn btn-primary" data-a="saveDraft">排入行程</button>'
+   +'<button class="btn btn-ghost" data-a="cancelDraft">取消</button></div></div></div>';
+  return h;
+}
+function dlgTask(){
+  var t=findTask(S.openTask);
+  var h='<div class="backdrop"><div class="dialog" style="width:560px;max-width:94vw">'
+   +'<div style="font-family:var(--fh);font-weight:800;font-size:19px">'+esc(t.title)+'</div>'
+   +'<div style="font-size:12.5px;color:var(--n600);margin:4px 0 16px">'+gname(t.group)+'　負責：'+esc(t.owner)+'　'+esc(t.date)+' '+esc(t.slot)+'　進度 '+t.pct+'%</div>'
+   +'<div style="border-top:2px solid var(--divider)">';
+  if(!t.logs.length) h+='<div style="padding:12px 0;font-size:13px;color:var(--n600)">尚無進度紀錄。</div>';
+  t.logs.forEach(function(l,i){
+    h+='<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--n200)">'
+     +'<div style="width:52px;font-size:12px;color:var(--n600);font-variant-numeric:tabular-nums">'+esc(l.date)+'</div>'
+     +'<div style="flex:1;display:flex;flex-direction:column;gap:6px"><div style="font-size:13px">'+esc(l.text)+'</div>'
+     +(l.photo?'<img src="'+l.photo+'" alt="現場照片" style="width:170px;height:118px;object-fit:cover;border:1px solid var(--n300)">'
+       :'<label class="btn" style="font-size:12px;padding:5px 10px;width:max-content;cursor:pointer">＋ 加入現場照片<input type="file" accept="image/*" class="hidden" data-a="logPhoto" data-i="'+i+'"></label>')
+     +'</div></div>';
+  });
+  h+='</div><div style="display:flex;gap:8px;margin-top:14px">'
+   +'<input class="input" id="logInput" placeholder="新增進度紀錄，例如：機架組裝完成，等主翼零件" style="flex:1">'
+   +'<button class="btn btn-primary" data-a="addLog">送出</button></div>'
+   +'<div style="display:flex;margin-top:16px"><button class="btn btn-ghost" data-a="closeTask">關閉</button></div></div></div>';
+  return h;
+}
+
+render();
+asInit();
+</script>
+</body>
+</html>
