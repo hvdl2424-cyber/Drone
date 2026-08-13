@@ -242,6 +242,9 @@ function startPolling(){
   if(pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(function(){
     if(document.hidden) return; // 分頁在背景時暫停輪詢，節省 Apps Script 每日配額
+    if(S.importing || S.draft || S.openTask!=null) return; // 對話框開著時（填課表／排任務／任務紀錄）先跳過，避免整頁重繪把對話框摔掉
+    var ae = document.activeElement;
+    if(ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) return; // 使用者正在輸入時先跳過，避免整個畫面重繪打斷輸入
     asRefresh().catch(function(err){ console.error(err); S.online=false; render(); });
   }, 8000);
 }
