@@ -100,14 +100,17 @@ var TABS = [['import','① 匯入課表'],['free','② 空堂總表'],['overlap'
 var IDENTITY_KEY = 'drone-schedule-identity-v1';
 
 /* ─────────── 狀態 ─────────── */
-/* 共用資料（members / groups / locked / tasks）存放在 Firestore，即時同步給所有人；
+/* 共用資料（members / groups / leaders / primary / locked / tasks）存放在 Google 試算表，透過 Apps Script 同步給所有人；
    其餘（tab、目前檢視的月份、篩選條件…）只是本機畫面狀態，不需要同步。 */
 function blankState(){
   var members = [];
   for(var i=0;i<9;i++){
     members.push({id:i,name:'組員 '+(i+1),grid:mkGrid(true),reason:mkGrid(''),imported:false,method:''});
   }
-  return {tab:'import',members:members,groups:{fuselage:[],wing:[],tail:[]},locked:false,tasks:[],
+  return {tab:'import',members:members,groups:{fuselage:[],wing:[],tail:[]},
+    leaders:{fuselage:null,wing:null,tail:null},
+    primary:{fuselage:[],wing:[],tail:[]},
+    locked:false,tasks:[],
     taskGroup:'fuselage',importing:null,previewGrid:null,previewReason:null,openTask:null,
     draft:null,calFilter:'weekday',conflict:'',monthIdx:0,
     ready:false,online:false,myId:null,gateError:''};
@@ -234,7 +237,14 @@ function asRefresh(){
           method:m.method||'',subj:m.subj||undefined};
       });
     }
-    if(d.groups){ S.groups={fuselage:d.groups.fuselage||[],wing:d.groups.wing||[],tail:d.groups.tail||[]}; S.locked=!!d.groups.locked; }
+    if(d.groups){
+      S.groups={fuselage:d.groups.fuselage||[],wing:d.groups.wing||[],tail:d.groups.tail||[]};
+      var ld=d.groups.leaders||{};
+      S.leaders={fuselage:numOrNull(ld.fuselage),wing:numOrNull(ld.wing),tail:numOrNull(ld.tail)};
+      var pr=d.groups.primary||{};
+      S.primary={fuselage:pr.fuselage||[],wing:pr.wing||[],tail:pr.tail||[]};
+      S.locked=!!d.groups.locked;
+    }
     S.tasks = d.tasks || [];
     S.online = true;
     render();
@@ -266,6 +276,7 @@ function genId(){
   if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
   return 'id-'+Date.now()+'-'+Math.random().toString(36).slice(2,10);
 }
+function numOrNull(v){ return v==null ? null : Number(v); } // v 可能合法為 0，不能用 v||null 判斷
 function writeMember(id){
   if(!GAS_URL) return;
   var m=S.members[id];
@@ -274,7 +285,8 @@ function writeMember(id){
 }
 function writeGroups(){
   if(!GAS_URL) return;
-  asPost('writeGroups',{fuselage:S.groups.fuselage,wing:S.groups.wing,tail:S.groups.tail,locked:!!S.locked}).catch(asErr);
+  asPost('writeGroups',{fuselage:S.groups.fuselage,wing:S.groups.wing,tail:S.groups.tail,
+    leaders:S.leaders,primary:S.primary,locked:!!S.locked}).catch(asErr);
 }
 function createTask(data){
   var id=genId();
@@ -374,23 +386,81 @@ var ACT = {
   assign:function(e,el){
     if(S.locked)return;
     var id=+el.dataset.i,key=el.dataset.k||null;
-    GROUPS.forEach(function(g){S.groups[g.key]=S.groups[g.key].filter(function(x){return x!==id;});});
-    if(key&&S.groups[key].length<3)S.groups[key].push(id);
+    GROUPS.forEach(function(g){
+      if(S.groups[g.key].indexOf(id)>=0){
+        S.groups[g.key]=S.groups[g.key].filter(function(x){return x!==id;});
+        S.leaders[g.key]=null; S.primary[g.key]=[]; // 名單變了，先前選的負責人／主要時間可能不再適用
+      }
+    });
+    if(key&&S.groups[key].length<3){
+      S.groups[key].push(id);
+      S.leaders[key]=null; S.primary[key]=[];
+    }
     render();
     writeGroups();
   },
-  clearGroups:function(){ S.groups={fuselage:[],wing:[],tail:[]}; render(); writeGroups(); },
+  clearGroups:function(){
+    S.groups={fuselage:[],wing:[],tail:[]};
+    S.leaders={fuselage:null,wing:null,tail:null};
+    S.primary={fuselage:[],wing:[],tail:[]};
+    render(); writeGroups();
+  },
+  setLeader:function(e,el){
+    if(S.locked)return;
+    var key=el.dataset.k,id=+el.dataset.i;
+    if(S.leaders[key]===id){
+      S.leaders[key]=null; S.primary[key]=[]; // 再點一次＝取消負責人身份，人還留在組內
+      render(); writeGroups();
+      return;
+    }
+    GROUPS.forEach(function(g){
+      if(g.key!==key && S.groups[g.key].indexOf(id)>=0){
+        S.groups[g.key]=S.groups[g.key].filter(function(x){return x!==id;});
+        if(S.leaders[g.key]===id) S.leaders[g.key]=null;
+        S.primary[g.key]=[];
+      }
+    });
+    if(S.groups[key].indexOf(id)<0){
+      if(S.groups[key].length>=3) S.groups[key]=S.groups[key].slice(1); // 騰出位置給新負責人
+      S.groups[key].push(id);
+    }
+    S.leaders[key]=id;
+    S.primary[key]=[];
+    render(); writeGroups();
+  },
+  togglePrimary:function(e,el){
+    var key=el.dataset.k,d=+el.dataset.d,p=+el.dataset.p;
+    if(S.leaders[key]==null)return; // 要先選好負責人才能排主要時間
+    var arr=(S.primary[key]||[]).slice();
+    var idx=-1;
+    for(var i=0;i<arr.length;i++) if(arr[i][0]===d&&arr[i][1]===p){ idx=i; break; }
+    if(idx>=0) arr.splice(idx,1);
+    else if(arr.length<2) arr.push([d,p]);
+    else return; // 已經選滿兩個，先取消一個才能再選別的
+    S.primary[key]=arr;
+    render(); writeGroups();
+  },
   autoGroup:function(){
-    var ids=S.members.map(function(m){return m.id;}),best=null;
+    if(S.locked)return;
+    var leaderIds=GROUPS.map(function(g){return S.leaders[g.key];});
+    if(leaderIds.some(function(x){return x==null;}))return; // 三組負責人都選好才能自動分配剩下的人
+    var rest=S.members.map(function(m){return m.id;}).filter(function(id){return leaderIds.indexOf(id)<0;});
+    var best=null;
     for(var t=0;t<400;t++){
-      var sh=ids.slice();
+      var sh=rest.slice();
       for(var i=sh.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var tmp=sh[i];sh[i]=sh[j];sh[j]=tmp;}
-      var g={fuselage:sh.slice(0,3),wing:sh.slice(3,6),tail:sh.slice(6,9)};
+      var g={
+        fuselage:[S.leaders.fuselage].concat(sh.slice(0,2)),
+        wing:[S.leaders.wing].concat(sh.slice(2,4)),
+        tail:[S.leaders.tail].concat(sh.slice(4,6))
+      };
       var ns=GROUPS.map(function(x){var c=groupCommon(g[x.key]);return c.slots.filter(function(s){return s[0]<5;}).length;});
       var score=Math.min.apply(null,ns)*2-(Math.max.apply(null,ns)-Math.min.apply(null,ns));
       if(!best||score>best.score)best={score:score,g:g};
     }
-    S.groups=best.g; render(); writeGroups();
+    S.groups=best.g;
+    S.primary={fuselage:[],wing:[],tail:[]}; // 組員換了，主要時間要重選；負責人維持不變
+    render(); writeGroups();
   },
   toggleLock:function(){
     var full=GROUPS.every(function(g){return S.groups[g.key].length===3;});
@@ -432,7 +502,7 @@ var ACT = {
     render(); deleteTask(id);
   },
   addTask:function(){
-    var base={group:S.taskGroup,title:'新任務',owner:S.members[0].name,date:'—',slot:'—',day:0,p0:4,p1:6,span:1};
+    var base={group:S.taskGroup,title:'新任務',owner:defaultOwnerFor(S.taskGroup),date:'—',slot:'—',day:0,p0:4,p1:6,span:1};
     var id=createTask(base);
     S.tasks.push({id:id,group:base.group,title:base.title,owner:base.owner,date:base.date,slot:base.slot,
       status:'待開始',pct:0,logs:[],day:base.day,p0:base.p0,p1:base.p1,span:base.span});
@@ -445,11 +515,11 @@ var ACT = {
     render(); updateTask(t.id,{span:t.span});
   },
   draft:function(e,el){
-    set({conflict:'',draft:{day:+el.dataset.d,p0:+el.dataset.p,p1:+el.dataset.p,title:'',owner:S.members[0].name,group:S.taskGroup,date:'',monthIdx:S.monthIdx}});
+    set({conflict:'',draft:{day:+el.dataset.d,p0:+el.dataset.p,p1:+el.dataset.p,title:'',owner:defaultOwnerFor(S.taskGroup),group:S.taskGroup,date:'',monthIdx:S.monthIdx}});
   },
   draftDate:function(e,el){
     var M=MONTHS[S.monthIdx],dnum=+el.dataset.n;
-    set({conflict:'',draft:{day:+el.dataset.d,p0:4,p1:6,title:'',owner:S.members[0].name,group:S.taskGroup,
+    set({conflict:'',draft:{day:+el.dataset.d,p0:4,p1:6,title:'',owner:defaultOwnerFor(S.taskGroup),group:S.taskGroup,
       date:M.month+'/'+(dnum<10?'0'+dnum:dnum),monthIdx:S.monthIdx}});
   },
   draftSet:function(e,el){
@@ -487,6 +557,10 @@ var ACT = {
   }
 };
 function findTask(id){ for(var i=0;i<S.tasks.length;i++) if(S.tasks[i].id===id) return S.tasks[i]; return null; }
+function defaultOwnerFor(key){
+  var leaderId=S.leaders[key];
+  return (leaderId!=null && S.members[leaderId]) ? S.members[leaderId].name : S.members[0].name;
+}
 function dateFor(day,idx){
   var M=MONTHS[idx||0],off=(day-M.startDow+7)%7,used={};
   S.tasks.forEach(function(t){used[t.date]=1;});
@@ -712,6 +786,7 @@ function viewOverlap(act,N){
 /* ④ 分組模擬 */
 function viewGroup(){
   var full=GROUPS.every(function(g){return S.groups[g.key].length===3;});
+  var leadersReady=GROUPS.every(function(g){return S.leaders[g.key]!=null;});
   var cols=GROUPS.map(function(g){
     var ids=S.groups[g.key],c=groupCommon(ids);
     return {g:g,ids:ids,n:ids.length===3?c.slots.filter(function(s){return s[0]<5;}).length:0,slots:c.slots};
@@ -721,19 +796,46 @@ function viewGroup(){
   var h='<div style="padding:32px">'
    +'<div style="display:flex;align-items:baseline;gap:16px;margin-bottom:6px"><div class="h1" style="margin:0">三組分組模擬</div>'
    +'<span class="tag '+(S.locked?'tag-accent':'tag-outline')+'">'+(S.locked?'已鎖定':'模擬中')+'</span></div>'
-   +'<div class="sub">點選組員右側按鈕指派到各組，系統即時計算「三人平日共同有空節數」，假日另列為備援。'+balance+'</div>';
+   +'<div class="sub">先為三組各選一位負責人，接著用自動配對把剩下的組員分進去（也可以手動指派），系統會即時計算「三人平日共同有空節數」，假日另列為備援。'+balance+'</div>';
+  h+='<div style="margin-bottom:28px"><div style="font-family:var(--fh);font-weight:700;font-size:15px;margin-bottom:10px">① 先指派三組負責人</div>'
+   +'<div class="panel">'+GROUPS.map(function(g,gi){
+      var leaderId=S.leaders[g.key];
+      return '<div style="display:flex;align-items:center;gap:12px;padding:10px 16px;'+(gi?'border-top:1px solid var(--n200);':'')+'flex-wrap:wrap">'
+       +'<div style="width:64px;font-size:13.5px;font-weight:700;flex-shrink:0">'+g.name+'</div>'
+       +'<div style="display:flex;gap:5px;flex-wrap:wrap">'+S.members.map(function(m){
+          var on=leaderId===m.id;
+          return '<button data-a="setLeader" data-k="'+g.key+'" data-i="'+m.id+'" style="border:1px solid '+(on?'var(--accent)':'var(--n300)')+';background:'+(on?'var(--accent)':'#fff')+';color:'+(on?'#fff':'var(--text)')+';font:600 11.5px var(--fb);padding:4px 8px;cursor:'+(S.locked?'not-allowed':'pointer')+';opacity:'+(S.locked?.45:1)+'">'+(on?'★ ':'')+esc(m.name)+'</button>';
+        }).join('')+'</div></div>';
+    }).join('')+'</div>'
+   +'<div style="font-size:11.5px;color:var(--n600);margin-top:8px">點一位組員設為該組負責人；同一人只能是一組的負責人，選了會自動把他移出原本的組別。再點一次可以取消負責人身份（人還留在組內）。</div></div>';
   h+='<div class="cols3" style="margin-bottom:28px">'+cols.map(function(c){
+    var leaderId=S.leaders[c.g.key], primarySlots=S.primary[c.g.key]||[];
+    var extra='<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--n200)">'
+     +'<div style="font-size:11px;letter-spacing:.1em;color:var(--n600);margin-bottom:6px">主要時間（從共同空堂挑，最多 2 個）</div>';
+    if(c.ids.length!==3){
+      extra+='<div style="font-size:12px;color:var(--n600)">這組還沒滿 3 人，請先完成分組。</div>';
+    }else if(leaderId==null){
+      extra+='<div style="font-size:12px;color:var(--n600)">請先在上方選好這組的負責人。</div>';
+    }else{
+      extra+=(c.slots.length?'<div style="display:flex;gap:5px;flex-wrap:wrap">'+c.slots.map(function(s){
+          var on=primarySlots.some(function(x){return x[0]===s[0]&&x[1]===s[1];});
+          return '<button data-a="togglePrimary" data-k="'+c.g.key+'" data-d="'+s[0]+'" data-p="'+s[1]+'" style="border:1px solid '+(on?'var(--accent)':'var(--n300)')+';background:'+(on?'var(--accent)':'#fff')+';color:'+(on?'#fff':'var(--text)')+';font:600 11px var(--fb);padding:4px 7px;cursor:pointer">'+DAYS[s[0]].slice(1)+' 第'+(s[1]+1)+'節</button>';
+        }).join('')+'</div>':'<div style="font-size:12px;color:var(--n600)">尚無共同空堂可選</div>')
+       +'<div style="margin-top:8px;font-size:12px;color:var(--n800)">'+(primarySlots.length?'已選定：'+primarySlots.map(function(s){return DAYS[s[0]]+' 第'+(s[1]+1)+'節';}).join('、'):'尚未選定')+'</div>';
+    }
+    extra+='</div>';
     return '<div style="padding:20px">'
      +'<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:12px"><div style="font-family:var(--fh);font-weight:800;font-size:19px">'+c.g.name+'</div>'
      +'<div style="margin-left:auto;font-size:12px;color:var(--n600)">'+c.ids.length+'/3 人</div></div>'
      +'<div style="font-size:36px;font-family:var(--fh);font-weight:800;line-height:1;color:var(--accent)">'+(c.ids.length===3?c.n:'—')+'</div>'
      +'<div style="font-size:11px;letter-spacing:.1em;color:var(--n600);margin-bottom:14px">三人平日共同空堂節數／週</div>'
      +'<div style="display:flex;flex-direction:column;gap:4px;min-height:70px">'+c.ids.map(function(i){
-        return '<div style="font-size:13px;border-bottom:1px solid var(--n200);padding-bottom:4px">'+esc(S.members[i].name)+'</div>';}).join('')+'</div>'
-     +'<div style="margin-top:12px;font-size:11.5px;color:var(--n700);line-height:1.7;white-space:pre-line">'+(c.ids.length===3?slotSummary(c.slots):'請指派 3 位組員')+'</div></div>';
+        return '<div style="font-size:13px;border-bottom:1px solid var(--n200);padding-bottom:4px">'+esc(S.members[i].name)+(leaderId===i?' <span style="color:var(--accent-700);font-weight:700">★負責人</span>':'')+'</div>';}).join('')+'</div>'
+     +'<div style="margin-top:12px;font-size:11.5px;color:var(--n700);line-height:1.7;white-space:pre-line">'+(c.ids.length===3?slotSummary(c.slots):'請指派 3 位組員')+'</div>'
+     +extra+'</div>';
   }).join('')+'</div>';
   h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:start"><div>'
-   +'<div style="font-family:var(--fh);font-weight:700;font-size:15px;margin-bottom:10px">指派組員</div><div style="border-top:2px solid var(--divider)">';
+   +'<div style="font-family:var(--fh);font-weight:700;font-size:15px;margin-bottom:10px">② 手動指派其餘組員（也可以直接用右邊的自動配對）</div><div style="border-top:2px solid var(--divider)">';
   S.members.forEach(function(m){
     var cur=GROUPS.filter(function(g){return S.groups[g.key].indexOf(m.id)>=0;})[0];
     h+='<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--n200)">'
@@ -747,12 +849,13 @@ function viewGroup(){
      +'</div></div>';
   });
   h+='</div></div><div>'
-   +'<div style="font-family:var(--fh);font-weight:700;font-size:15px;margin-bottom:10px">系統建議</div>'
+   +'<div style="font-family:var(--fh);font-weight:700;font-size:15px;margin-bottom:10px">③ 自動分配剩下的組員</div>'
    +'<div class="panel" style="padding:18px"><div style="font-size:13px;line-height:1.8;color:var(--n800)">'
-   +(full?balance+(Math.max.apply(null,ns)-Math.min.apply(null,ns)>8?' 建議互換落差最大的兩組各一人，或直接使用自動配對。':' 分佈相當平均，可直接鎖定。')
-        :'請將 9 位組員分配至三組（每組 3 人）。系統會即時計算三人共同空堂節數，並提示三組之間的落差。')
-   +'</div><div style="display:flex;gap:8px;margin-top:16px"><button class="btn" data-a="autoGroup">自動配對最平均分法</button>'
-   +'<button class="btn btn-ghost" data-a="clearGroups">清空</button></div></div>'
+   +(!leadersReady?'請先完成上面「① 先指派三組負責人」，三組都選好之後才能自動分配剩下的 6 位組員。'
+        :full?balance+(Math.max.apply(null,ns)-Math.min.apply(null,ns)>8?' 建議互換落差最大的兩組各一人，或直接重新自動配對。':' 分佈相當平均，可直接鎖定。')
+        :'負責人都選好了，按下方「自動配對」會把剩下 6 位組員平均分配到三組（負責人固定不動），系統會挑共同空堂最平均的一種分法。')
+   +'</div><div style="display:flex;gap:8px;margin-top:16px"><button class="btn" data-a="autoGroup"'+(!leadersReady?' disabled':'')+'>自動配對剩下的組員</button>'
+   +'<button class="btn btn-ghost" data-a="clearGroups">全部清空</button></div></div>'
    +'<div style="margin-top:16px"><button class="btn btn-primary" data-a="toggleLock"'+(!S.locked&&!full?' disabled':'')+'>'+(S.locked?'解除鎖定，重新模擬':'鎖定分組並進入進度管理')+'</button></div>'
    +'</div></div></div>';
   return h;
