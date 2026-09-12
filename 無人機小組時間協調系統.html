@@ -223,6 +223,23 @@ function asInit(){
     S.ready=true; S.online=false; S.gateError='連線失敗：'+err.message; render();
   });
 }
+/* Sheets 可能把「9/09」存成真正的日期，讀回來會是 ISO 字串，需要改回 M/DD 才能比對月份 */
+function normalizeTask(t){
+  var s=String(t.date==null?'':t.date);
+  if(/^\d{4}-\d{2}-\d{2}T/.test(s)){
+    var dt=new Date(s);
+    t.date=(dt.getMonth()+1)+'/'+(dt.getDate()<10?'0'+dt.getDate():dt.getDate());
+    t.day=(dt.getDay()+6)%7;
+  }else if(/^\d{4}-\d{1,2}-\d{1,2}$/.test(s)){
+    var p=s.split('-');
+    t.date=Number(p[1])+'/'+(Number(p[2])<10?'0'+Number(p[2]):Number(p[2]));
+    t.day=(new Date(Number(p[0]),Number(p[1])-1,Number(p[2])).getDay()+6)%7;
+  }
+  t.span=Number(t.span)||1;
+  t.p0=Number(t.p0)||0;
+  t.p1=Number(t.p1)||t.p0;
+  return t;
+}
 function asErr(err){ console.error(err); S.online=false; S.gateError='連線發生問題：'+err.message; render(); }
 var pendingWrites = 0;
 function asRefresh(){
@@ -245,7 +262,7 @@ function asRefresh(){
       S.primary={fuselage:pr.fuselage||[],wing:pr.wing||[],tail:pr.tail||[]};
       S.locked=!!d.groups.locked;
     }
-    S.tasks = d.tasks || [];
+    S.tasks = (d.tasks || []).map(normalizeTask);
     S.online = true;
     render();
   });
