@@ -502,7 +502,9 @@ var ACT = {
     render(); deleteTask(id);
   },
   addTask:function(){
-    var base={group:S.taskGroup,title:'新任務',owner:defaultOwnerFor(S.taskGroup),date:'—',slot:'—',day:0,p0:4,p1:6,span:1};
+    var M=MONTHS[S.monthIdx],date=dateFor(0,S.monthIdx),dnum=Number(date.split('/')[1]);
+    var base={group:S.taskGroup,title:'新任務',owner:defaultOwnerFor(S.taskGroup),date:date,
+      slot:'第5–7節',day:(M.startDow+dnum-1)%7,p0:4,p1:6,span:1};
     var id=createTask(base);
     S.tasks.push({id:id,group:base.group,title:base.title,owner:base.owner,date:base.date,slot:base.slot,
       status:'待開始',pct:0,logs:[],day:base.day,p0:base.p0,p1:base.p1,span:base.span});
@@ -510,6 +512,18 @@ var ACT = {
   },
   editTitle:function(e,el){ var t=findTask(el.dataset.i); t.title=el.value; updateTask(t.id,{title:t.title}); },
   editOwner:function(e,el){ var t=findTask(el.dataset.i); t.owner=el.value; updateTask(t.id,{owner:t.owner}); },
+  taskDate:function(e,el){
+    var t=findTask(el.dataset.i),M=MONTHS[S.monthIdx],dnum=Number(el.value);
+    t.date=M.month+'/'+(dnum<10?'0'+dnum:dnum);
+    t.day=(M.startDow+dnum-1)%7;
+    render(); updateTask(t.id,{date:t.date,day:t.day});
+  },
+  taskSlot:function(e,el){
+    var t=findTask(el.dataset.i),k=el.dataset.k,v=Number(el.value);
+    if(k==='p0'){ t.p0=v; if(t.p1<v) t.p1=v; } else { t.p1=Math.max(v,t.p0); }
+    t.slot='第'+(t.p0+1)+(t.p1>t.p0?'–'+(t.p1+1):'')+'節';
+    render(); updateTask(t.id,{p0:t.p0,p1:t.p1,slot:t.slot});
+  },
   span:function(e,el){
     var t=findTask(el.dataset.i); t.span=Math.max(1,Math.min(14,(t.span||1)+Number(el.dataset.k)));
     render(); updateTask(t.id,{span:t.span});
@@ -885,7 +899,7 @@ function viewTasks(){
       return '<button data-a="taskGroup" data-k="'+g.key+'" style="border:2px solid var(--divider);background:'+(S.taskGroup===g.key?'var(--text)':'#fff')+';color:'+(S.taskGroup===g.key?'#fff':'var(--text)')+';font:600 13px var(--fh);padding:8px 16px;cursor:pointer">'+g.name+'</button>';
     }).join('')+'<button class="btn" data-a="addTask" style="margin-left:auto">＋ 新增任務</button></div>';
   var rows=S.tasks.filter(function(t){return t.group===S.taskGroup;});
-  h+='<table class="data"><thead><tr><th style="width:44px">編號</th><th>任務內容</th><th style="width:110px">負責</th><th style="width:150px">預定日期／時段</th><th style="width:110px">狀態</th><th style="width:190px">進度</th><th style="width:110px"></th></tr></thead><tbody>';
+  h+='<table class="data"><thead><tr><th style="width:44px">編號</th><th>任務內容</th><th style="width:110px">負責</th><th style="width:210px">預定日期／時段</th><th style="width:110px">狀態</th><th style="width:190px">進度</th><th style="width:110px"></th></tr></thead><tbody>';
   if(!rows.length) h+='<tr><td colspan="7" style="color:var(--n600);padding:18px 10px">此組尚未有任務。點「＋ 新增任務」，或到週行程表／月行事曆點時段排入。</td></tr>';
   rows.forEach(function(t,i){
     h+='<tr>'
@@ -893,7 +907,7 @@ function viewTasks(){
      +'<td><input class="input" data-a="editTitle" data-i="'+t.id+'" value="'+esc(t.title)+'" style="font-weight:600;padding:4px 6px">'
      +'<div style="font-size:11.5px;color:var(--n600);margin-top:3px">'+(t.logs.length?'最新：'+esc(t.logs[t.logs.length-1].date+' '+t.logs[t.logs.length-1].text):'尚無進度紀錄')+'</div></td>'
      +'<td><input class="input" data-a="editOwner" data-i="'+t.id+'" value="'+esc(t.owner)+'" style="padding:4px 6px"></td>'
-     +'<td style="font-size:12px">'+esc(t.date)+'　'+esc(t.slot)+'</td>'
+     +'<td>'+dateSlotCell(t)+'</td>'
      +'<td><select class="input" data-a="status" data-i="'+t.id+'" style="font-size:12px;padding:4px 6px">'
      + ['待開始','進行中','已完成','延遲'].map(function(o){return '<option'+(t.status===o?' selected':'')+'>'+o+'</option>';}).join('')+'</select></td>'
      +'<td><div style="display:flex;align-items:center;gap:8px"><input type="range" min="0" max="100" step="5" value="'+t.pct+'" data-a="pct" data-i="'+t.id+'" style="flex:1"><div style="width:38px;text-align:right;font-size:12px;font-variant-numeric:tabular-nums">'+t.pct+'%</div></div></td>'
@@ -902,8 +916,22 @@ function viewTasks(){
   });
   return h+'</tbody></table></div>';
 }
-
-/* ⑥ 週行程表 */
+function dateSlotCell(t){
+  var M=MONTHS[S.monthIdx],tm=Number(String(t.date).split('/')[0]),dn=Number(String(t.date).split('/')[1]);
+  if(tm!==M.month) return '<div style="font-size:12px">'+esc(t.date)+'　'+esc(t.slot)+'</div>'
+    +'<div style="font-size:10.5px;color:var(--n600)">不屬 '+M.month+' 月，請先切換月份再修改</div>';
+  var days='';
+  for(var i=1;i<=M.days;i++){
+    var off=((M.startDow+i-1)%7)>=5||!!HOLIDAYS[M.month+'/'+i];
+    days+='<option value="'+i+'"'+(dn===i?' selected':'')+'>'+M.month+'/'+i+' '+DAYS[(M.startDow+i-1)%7]+(off?'（假）':'')+'</option>';
+  }
+  var sel=function(k,v){
+    return '<select class="input" data-a="taskSlot" data-i="'+t.id+'" data-k="'+k+'" style="font-size:11px;padding:3px 4px">'
+      + TIMES.map(function(x,i){return '<option value="'+i+'"'+(v===i?' selected':'')+'>第'+(i+1)+'節</option>';}).join('')+'</select>';
+  };
+  return '<select class="input" data-a="taskDate" data-i="'+t.id+'" style="font-size:11px;padding:3px 4px">'+days+'</select>'
+   +'<div style="display:flex;gap:4px;align-items:center;margin-top:4px">'+sel('p0',t.p0)+'<span style="font-size:11px;color:var(--n600)">至</span>'+sel('p1',t.p1)+'</div>';
+}
 function viewCal(act,N){
   var M=MONTHS[S.monthIdx];
   var GC={fuselage:{bg:'var(--accent)',fg:'#fff'},wing:{bg:'var(--text)',fg:'#fff'},tail:{bg:'#fff',fg:'var(--text)'}};
